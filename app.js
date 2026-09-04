@@ -1,4 +1,4 @@
-const API_URL="PASTE_YOUR_APPS_SCRIPT_EXEC_URL_HERE";
+const API_URL="https://script.google.com/macros/s/AKfycbwYIXL6HtbCW6QiSediymQGV_zySDfcd0f-f61zJ2ihqeIFJ4h1C_Ge6T_zlaVWw3-M/exec";
 let DB={}; const $=id=>document.getElementById(id);
 const uid=()=>Date.now()+"-"+Math.random().toString(36).slice(2);
 const num=v=>Number(v||0)||0; const money=v=>"₹"+num(v).toLocaleString("en-IN");
