@@ -31,3 +31,34 @@ button{background:var(--primary);color:#fff;border:0;font-weight:bold;cursor:poi
   border-radius:999px;
   background:rgba(70,110,220,.12);
 }
+
+/* ADD THIS AT THE END OF style.css */
+.summary-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  gap:12px;
+  margin-bottom:14px;
+}
+.person-card{display:flex;flex-direction:column;gap:5px}
+.balance-label{
+  display:inline-block;
+  width:max-content;
+  font-size:12px;
+  font-weight:700;
+  padding:4px 8px;
+  border-radius:999px;
+  background:rgba(70,110,220,.12);
+}
+
+
+/* ===== DASHBOARD IN EVERY SECTION ===== */
+.section-dashboard{margin:0 0 16px 0}
+.section-dashboard h3{margin:0 0 10px;font-size:18px}
+.section-dashboard-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.section-stat-card{background:var(--card,#fff);border:1px solid rgba(120,130,150,.22);border-radius:14px;padding:15px;box-shadow:0 5px 18px rgba(0,0,0,.05);display:flex;flex-direction:column;gap:5px}
+.section-stat-card small{opacity:.72;font-size:13px}
+.section-stat-card b{font-size:22px}
+.section-stat-card span{font-size:12px;opacity:.7}
+.dark .section-stat-card{background:#172033;border-color:#2b3952}
+@media(max-width:900px){.section-dashboard-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:480px){.section-dashboard-grid{grid-template-columns:1fr}.section-stat-card b{font-size:20px}}
