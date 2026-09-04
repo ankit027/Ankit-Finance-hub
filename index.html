@@ -1,25 +1,18 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
 <head>
-  <base target="_top">
-
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
 
   <title>Ankit Finance Hub</title>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-  <style>
-    <?!= include("Style"); ?>
-  </style>
+  <link rel="stylesheet" href="./style.css">
 </head>
 
 <body>
 
 <header>
   <button id="menuBtn">☰</button>
-
   <h1>💰 Ankit Finance Hub</h1>
 
   <div class="headerRight">
@@ -28,63 +21,44 @@
   </div>
 </header>
 
-
 <aside id="sidebar">
-
   <button data-page="dashboard">🏠 Dashboard</button>
-
   <button data-page="passbook">📒 Passbook</button>
-
   <button data-page="salary">💰 Salary</button>
-
   <button data-page="loans">🏦 Loans & EMI</button>
-
   <button data-page="give">🤝 Give & Take</button>
-
   <button data-page="splitter">🧮 Money Splitter</button>
-
   <button data-page="investments">📈 Investments & SIP</button>
-
 </aside>
-
 
 <main>
 
-<!-- DASHBOARD -->
-
 <section id="dashboard" class="page active">
+  <h2>🏠 Financial Dashboard</h2>
 
-<h2>🏠 Financial Dashboard</h2>
+  <div id="dash" class="cards"></div>
 
-<div id="dash" class="cards"></div>
+  <div class="chartGrid">
+    <div class="chartCard">
+      <h3>Monthly Money Overview</h3>
+      <canvas id="mainChart"></canvas>
+    </div>
 
-<div class="chartGrid">
+    <div class="chartCard">
+      <h3>Expense Breakdown</h3>
+      <canvas id="expenseChart"></canvas>
+    </div>
+  </div>
 
-<div class="chartCard">
-<h3>Monthly Overview</h3>
-<canvas id="mainChart"></canvas>
-</div>
-
-<div class="chartCard">
-<h3>Income vs Expense</h3>
-<canvas id="expenseChart"></canvas>
-</div>
-
-</div>
-
-<button onclick="loadAll()">🔄 Refresh Cloud Data</button>
-
+  <button onclick="loadAll()">🔄 Refresh Cloud Data</button>
 </section>
 
-
-<!-- PASSBOOK -->
 
 <section id="passbook" class="page">
 
 <h2>📒 Passbook</h2>
 
 <div class="form">
-
 <input id="pbDate" type="date">
 
 <select id="pbType">
@@ -93,21 +67,18 @@
 </select>
 
 <input id="pbCat" list="categoryList" placeholder="Category">
-
 <input id="pbAmt" type="number" placeholder="Amount">
-
 <input id="pbAccount" list="accountList" placeholder="Account / UPI / Cash">
-
 <input id="pbRemarks" list="remarksList" placeholder="Remarks">
 
 <button onclick="addPassbook()">Save</button>
-
 </div>
 
 <datalist id="categoryList"></datalist>
 <datalist id="accountList"></datalist>
 <datalist id="remarksList"></datalist>
 
+<h3>📊 Passbook Dashboard</h3>
 <div id="passbookDash" class="section-dashboard-grid"></div>
 
 <div class="chartCard">
@@ -115,34 +86,28 @@
 <canvas id="passbookChart"></canvas>
 </div>
 
+<h3>Transactions</h3>
 <div id="pbList"></div>
 
 </section>
 
-
-<!-- SALARY -->
 
 <section id="salary" class="page">
 
 <h2>💰 Salary</h2>
 
 <div class="form">
-
 <input id="salMonth" type="month">
-
 <input id="salCompany" list="companyList" placeholder="Company">
-
 <input id="salAmount" type="number" placeholder="Amount">
-
 <input id="salRemarks" list="salaryRemarksList" placeholder="Remarks">
-
 <button onclick="addSalary()">Save</button>
-
 </div>
 
 <datalist id="companyList"></datalist>
 <datalist id="salaryRemarksList"></datalist>
 
+<h3>📊 Salary Dashboard</h3>
 <div id="salaryDash" class="section-dashboard-grid"></div>
 
 <div class="chartCard">
@@ -150,69 +115,59 @@
 <canvas id="salaryChart"></canvas>
 </div>
 
+<h3>Salary Records</h3>
 <div id="salaryList"></div>
 
 </section>
 
 
-<!-- LOANS -->
-
 <section id="loans" class="page">
 
 <h2>🏦 Loans & EMI</h2>
 
+<h3>Add Loan</h3>
+
 <div class="form">
-
-<input id="loanName" list="loanNameList" placeholder="Loan Name">
-
-<input id="loanInitial" type="number" placeholder="Initial Amount">
-
+<input id="loanName" list="loanNameList" placeholder="Loan name">
+<input id="loanInitial" type="number" placeholder="Initial amount">
 <input id="loanRemarks" list="loanRemarksList" placeholder="Remarks">
-
 <button onclick="addLoan()">Add Loan</button>
-
 </div>
 
 <datalist id="loanNameList"></datalist>
 <datalist id="loanRemarksList"></datalist>
 
+<h3>Mark EMI Paid</h3>
 
 <div class="form">
-
 <select id="emiLoan"></select>
-
 <input id="emiMonth" type="month">
-
-<input id="emiAmount" type="number" placeholder="EMI Amount">
-
+<input id="emiAmount" type="number" placeholder="EMI amount">
 <input id="emiRemarks" list="emiRemarksList" placeholder="Remarks">
-
 <button onclick="addEmi()">Mark EMI Paid</button>
-
 </div>
 
 <datalist id="emiRemarksList"></datalist>
 
+<h3>📊 Loans Dashboard</h3>
 <div id="loanDash" class="section-dashboard-grid"></div>
 
 <div class="chartCard">
-<h3>Loan Overview</h3>
+<h3>Loan & EMI Overview</h3>
 <canvas id="loanChart"></canvas>
 </div>
 
+<h3>Loans</h3>
 <div id="loanList"></div>
 
 </section>
 
-
-<!-- GIVE TAKE -->
 
 <section id="give" class="page">
 
 <h2>🤝 Give & Take</h2>
 
 <div class="form">
-
 <input id="gtPerson" list="personList" placeholder="Person">
 
 <select id="gtType">
@@ -223,25 +178,21 @@
 </select>
 
 <input id="gtAmount" type="number" placeholder="Amount">
-
 <input id="gtDate" type="date">
-
 <input id="gtPurpose" list="purposeList" placeholder="Purpose">
-
 <input id="gtNotes" list="notesList" placeholder="Notes">
 
 <button onclick="addGive()">Save</button>
-
 </div>
 
 <datalist id="personList"></datalist>
 <datalist id="purposeList"></datalist>
 <datalist id="notesList"></datalist>
 
+<h3>📊 Give & Take Summary</h3>
 <div id="giveDash" class="section-dashboard-grid"></div>
 
 <h3>👤 Individual Balance</h3>
-
 <div id="gtDashboard" class="summary-grid"></div>
 
 <div class="chartCard">
@@ -249,20 +200,20 @@
 <canvas id="giveChart"></canvas>
 </div>
 
+<h3>All Transactions</h3>
 <div id="gtList"></div>
 
 </section>
 
 
-<!-- SPLITTER -->
-
 <section id="splitter" class="page">
 
 <h2>🧮 Money Splitter</h2>
 
-<div class="form">
+<h3>Create Group</h3>
 
-<input id="spGroup" placeholder="Group Name">
+<div class="form">
+<input id="spGroup" list="groupNameList" placeholder="Group name">
 
 <select id="spCat">
 <option>Trip</option>
@@ -272,74 +223,61 @@
 </select>
 
 <input id="spMembers" placeholder="Ankit, Chirag, Rahul">
-
 <button onclick="addGroup()">Create Group</button>
-
 </div>
 
+<datalist id="groupNameList"></datalist>
+
+<h3>Add Expense</h3>
 
 <div class="form">
-
 <select id="spGroupSel"></select>
-
-<input id="spTitle" placeholder="Expense Title">
-
+<input id="spTitle" list="expenseTitleList" placeholder="Hotel / Dinner">
 <input id="spAmount" type="number" placeholder="Amount">
-
 <select id="spPaidBy"></select>
-
 <input id="spMembersSel" placeholder="Members blank = all">
-
 <button onclick="addSplitExpense()">Save Expense</button>
-
 </div>
 
+<datalist id="expenseTitleList"></datalist>
 
-<h3>📊 Group Summary</h3>
-
+<h3>📊 Splitter Summary</h3>
 <div id="splitSummary" class="summary-grid"></div>
 
-
 <h3>💸 Who Pays Whom</h3>
-
 <div id="settlementList"></div>
 
-
 <div class="chartCard">
-<h3>Payment Chart</h3>
+<h3>Group Payment Chart</h3>
 <canvas id="splitChart"></canvas>
 </div>
 
-
-<h3>Groups</h3>
-
+<h3>Groups & Expenses</h3>
 <div id="splitList"></div>
 
 </section>
 
 
-<!-- INVESTMENTS -->
-
 <section id="investments" class="page">
 
 <h2>📈 Investment & SIP</h2>
 
+<h3>Create Investment Basket</h3>
+
 <div class="form">
-
-<input id="sipPerson" placeholder="Person">
-
-<input id="sipBasket" placeholder="Basket Name">
-
+<input id="sipPerson" list="investmentPersonList" placeholder="Person">
+<input id="sipBasket" list="basketNameList" placeholder="Basket Name">
 <button onclick="addBasket()">Create Basket</button>
-
 </div>
 
+<datalist id="investmentPersonList"></datalist>
+<datalist id="basketNameList"></datalist>
+
+<h3>Add Asset</h3>
 
 <div class="form">
-
 <select id="assetBasket"></select>
-
-<input id="assetName" placeholder="Asset Name">
+<input id="assetName" list="assetNameList" placeholder="ETF / Mutual Fund">
 
 <select id="assetType">
 <option>ETF</option>
@@ -350,21 +288,20 @@
 </select>
 
 <input id="assetAmount" type="number" placeholder="Monthly Amount">
-
 <button onclick="addAsset()">Add Asset</button>
-
 </div>
 
+<datalist id="assetNameList"></datalist>
 
+<h3>📊 Investment Dashboard</h3>
 <div id="investmentDash" class="section-dashboard-grid"></div>
-
 
 <div class="chartCard">
 <h3>Monthly Investment Allocation</h3>
 <canvas id="investmentChart"></canvas>
 </div>
 
-
+<h3>Investment Baskets</h3>
 <div id="basketList"></div>
 
 </section>
@@ -373,10 +310,8 @@
 
 <div id="toast"></div>
 
-
-<script>
-<?!= include("JavaScript"); ?>
-</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="./app.js"></script>
 
 </body>
 </html>
