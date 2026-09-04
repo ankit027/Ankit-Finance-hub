@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ankit Finance Hub</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <button id="menuBtn" aria-label="Menu">☰</button>
+  <h1>💰 Ankit Finance Hub</h1>
+  <div class="headerRight">
+    <button id="themeBtn" class="themeBtn" title="Toggle dark mode">🌙 Dark</button>
+    <span id="status">☁️ Connecting…</span>
+  </div>
+</header>
+
+<aside id="sidebar">
+  <button data-page="dashboard">🏠 Dashboard</button>
+  <button data-page="passbook">📒 Passbook</button>
+  <button data-page="salary">💰 Salary</button>
+  <button data-page="loans">🏦 Loans & EMI</button>
+  <button data-page="give">🤝 Give & Take</button>
+  <button data-page="splitter">🧮 Money Splitter</button>
+  <button data-page="investments">📈 Investments & SIP</button>
+</aside>
+
+<main>
+<section id="dashboard" class="page active">
+<h2>🏠 Dashboard</h2><div id="dash" class="cards"></div>
+<button onclick="loadAll()">🔄 Refresh Cloud Data</button>
+</section>
+
+<section id="passbook" class="page">
+<h2>📒 Passbook</h2>
+<div class="form"><input id="pbDate" type="date"><select id="pbType"><option>Expense</option><option>Income</option></select><input id="pbCat" placeholder="Category"><input id="pbAmt" type="number" placeholder="Amount"><input id="pbAccount" placeholder="Account / UPI / Cash"><input id="pbRemarks" placeholder="Remarks"><button onclick="addPassbook()">Save instantly</button></div>
+<div id="pbList"></div>
+</section>
+
+<section id="salary" class="page">
+<h2>💰 Salary</h2>
+<div class="form"><input id="salMonth" type="month"><input id="salCompany" placeholder="Company"><input id="salAmount" type="number" placeholder="Amount"><input id="salRemarks" placeholder="Remarks"><button onclick="addSalary()">Save</button></div><div id="salaryList"></div>
+</section>
+
+<section id="loans" class="page">
+<h2>🏦 Loans & EMI</h2>
+<div class="form"><input id="loanName" placeholder="Loan name"><input id="loanInitial" type="number" placeholder="Initial amount"><input id="loanRemarks" placeholder="Remarks"><button onclick="addLoan()">Add loan</button></div>
+<div class="form"><select id="emiLoan"></select><input id="emiMonth" type="month"><input id="emiAmount" type="number" placeholder="EMI amount"><input id="emiRemarks" placeholder="Remarks"><button onclick="addEmi()">Mark EMI paid</button></div><div id="loanList"></div>
+</section>
+
+<section id="give" class="page">
+<h2>🤝 Give & Take</h2>
+<div class="form"><input id="gtPerson" placeholder="Person"><select id="gtType"><option>Receive</option><option>Pay</option></select><input id="gtAmount" type="number" placeholder="Amount"><input id="gtDate" type="date"><input id="gtPurpose" placeholder="Purpose"><input id="gtNotes" placeholder="Notes"><button onclick="addGive()">Save</button></div><div id="gtList"></div>
+</section>
+
+<section id="splitter" class="page">
+<h2>🧮 Money Splitter</h2>
+<h3>Create group</h3>
+<div class="form"><input id="spGroup" placeholder="Group name e.g. Goa Trip"><select id="spCat"><option>Trip</option><option>Food</option><option>Party</option><option>Other</option></select><input id="spMembers" placeholder="Members: Ankit, Chirag, Rahul"><button id="createGroupBtn" onclick="addGroup()">Create group</button></div>
+<h3>Add expense</h3>
+<div class="form"><select id="spGroupSel"><option value="">Select group</option></select><input id="spTitle" placeholder="Hotel / Dinner"><input id="spAmount" type="number" placeholder="Amount"><select id="spPaidBy"><option value="">Paid by</option></select><input id="spMembersSel" placeholder="Members (blank = all)"><button onclick="addSplitExpense()">Save expense</button></div>
+<div id="splitList"></div>
+</section>
+
+<section id="investments" class="page">
+<h2>📈 Investment & SIP Basket</h2>
+<div class="form"><input id="sipPerson" placeholder="Ankit / Papa / Jinal"><input id="sipBasket" placeholder="Basket name"><button onclick="addBasket()">Create basket</button></div>
+<div class="form"><select id="assetBasket"></select><input id="assetName" placeholder="ETF / Mutual Fund"><select id="assetType"><option>ETF</option><option>Mutual Fund</option><option>Stock</option><option>Gold</option><option>Other</option></select><input id="assetAmount" type="number" placeholder="Monthly amount"><button onclick="addAsset()">Add asset</button></div>
+<div id="basketList"></div>
+</section>
+</main>
+<div id="toast"></div>
+<script src="app.js"></script>
+</body></html>
