@@ -1,9 +1,10 @@
 const API_URL="https://script.google.com/macros/s/AKfycbwYIXL6HtbCW6QiSediymQGV_zySDfcd0f-f61zJ2ihqeIFJ4h1C_Ge6T_zlaVWw3-M/exec";
 
-const LOCAL_KEY="ankit_finance_hub_db_final";
+const LOCAL_KEY="ankit_finance_hub_final_v1";
 
 let DB={};
 let syncInProgress=false;
+
 let charts={};
 
 const $=id=>document.getElementById(id);
@@ -13,7 +14,7 @@ const uid=()=>Date.now()+"-"+Math.random().toString(36).slice(2);
 const num=v=>Number(v||0)||0;
 
 const money=v=>"₹"+num(v).toLocaleString("en-IN",{
-  maximumFractionDigits:2
+maximumFractionDigits:2
 });
 
 const ym=()=>new Date().toISOString().slice(0,7);
@@ -21,22 +22,36 @@ const ym=()=>new Date().toISOString().slice(0,7);
 const today=()=>new Date().toISOString().slice(0,10);
 
 
-/* ================= TOAST ================= */
+/* ================= API ================= */
 
-function toast(t){
+async function api(action,payload={}){
 
-  $("toast").textContent=t;
+const response=await fetch(API_URL,{
+method:"POST",
+headers:{
+"Content-Type":"text/plain;charset=utf-8"
+},
+body:JSON.stringify({
+action,
+...payload
+})
+});
 
-  $("toast").classList.add("show");
+const text=await response.text();
 
-  setTimeout(()=>{
-    $("toast").classList.remove("show");
-  },2500);
+let data;
 
+try{
+data=JSON.parse(text);
+}catch(e){
+throw new Error("Invalid server response");
 }
 
-function setStatus(t){
-  $("status").textContent=t;
+if(!data.success){
+throw new Error(data.error||"Server error");
+}
+
+return data;
 }
 
 
@@ -44,66 +59,45 @@ function setStatus(t){
 
 function persist(){
 
-  try{
-    localStorage.setItem(
-      LOCAL_KEY,
-      JSON.stringify(DB)
-    );
-  }catch(e){}
+try{
+localStorage.setItem(
+LOCAL_KEY,
+JSON.stringify(DB)
+);
+}catch(e){}
 
 }
 
 function restore(){
 
-  try{
-    return JSON.parse(
-      localStorage.getItem(LOCAL_KEY)||"{}"
-    );
-  }catch(e){
-    return {};
-  }
+try{
+return JSON.parse(
+localStorage.getItem(LOCAL_KEY)||"{}"
+);
+}catch(e){
+return {};
+}
 
 }
 
 
-/* ================= API ================= */
+/* ================= UI ================= */
 
-async function api(action,payload={}){
+function toast(text){
 
-  const r=await fetch(API_URL,{
-    method:"POST",
-    headers:{
-      "Content-Type":"text/plain;charset=utf-8"
-    },
-    body:JSON.stringify({
-      action,
-      ...payload
-    })
-  });
+$("toast").textContent=text;
 
-  const text=await r.text();
+$("toast").classList.add("show");
 
-  let j;
+setTimeout(()=>{
+$("toast").classList.remove("show");
+},2500);
 
-  try{
-    j=JSON.parse(text);
-  }catch(e){
+}
 
-    throw new Error(
-      "Invalid API response. Check Apps Script."
-    );
+function setStatus(text){
 
-  }
-
-  if(!j.success){
-
-    throw new Error(
-      j.error||"API Error"
-    );
-
-  }
-
-  return j;
+$("status").textContent=text;
 
 }
 
@@ -112,47 +106,43 @@ async function api(action,payload={}){
 
 async function loadAll(silent=false){
 
-  if(syncInProgress)return;
+if(syncInProgress)return;
 
-  syncInProgress=true;
+syncInProgress=true;
 
-  try{
+try{
 
-    if(!silent){
-      setStatus("☁️ Syncing...");
-    }
+if(!silent){
+setStatus("☁️ Syncing...");
+}
 
-    const r=await api("loadAll");
+const result=await api("loadAll");
 
-    DB=r.data||{};
+DB=result.data||{};
 
-    persist();
+persist();
 
-    render();
+render();
 
-    setStatus("☁️ Synced");
+setStatus("☁️ Synced");
 
-  }catch(e){
+}catch(e){
 
-    if(Object.keys(DB).length){
+if(Object.keys(DB).length){
+setStatus("📱 Offline Cache");
+}else{
+setStatus("⚠️ Sync Error");
+}
 
-      setStatus("📱 Offline Cache");
+if(!silent){
+toast(e.message);
+}
 
-    }else{
+}finally{
 
-      setStatus("⚠️ Sync Error");
+syncInProgress=false;
 
-    }
-
-    if(!silent){
-      toast(e.message);
-    }
-
-  }finally{
-
-    syncInProgress=false;
-
-  }
+}
 
 }
 
@@ -161,55 +151,52 @@ async function loadAll(silent=false){
 
 async function save(table,data){
 
-  setStatus("☁️ Saving...");
+setStatus("☁️ Saving...");
 
-  try{
+try{
 
-    const r=await api(
-      "save",
-      {
-        table,
-        data
-      }
-    );
+const result=await api("save",{
+table,
+data
+});
 
-    const record=r.record||data;
+const record=result.record||data;
 
-    DB[table]=DB[table]||[];
+DB[table]=DB[table]||[];
 
-    const i=DB[table].findIndex(
-      x=>String(x.ID)===String(record.ID)
-    );
+const index=DB[table].findIndex(
+x=>String(x.ID)===String(record.ID)
+);
 
-    if(i>=0){
+if(index>=0){
 
-      DB[table][i]=record;
+DB[table][index]=record;
 
-    }else{
+}else{
 
-      DB[table].push(record);
+DB[table].push(record);
 
-    }
+}
 
-    persist();
+persist();
 
-    render();
+render();
 
-    setStatus("☁️ Synced");
+setStatus("☁️ Synced");
 
-    toast("✓ Saved instantly");
+toast("✓ Saved instantly");
 
-    return record;
+return record;
 
-  }catch(e){
+}catch(e){
 
-    setStatus("⚠️ Save failed");
+setStatus("⚠️ Save failed");
 
-    toast(e.message);
+toast(e.message);
 
-    throw e;
+throw e;
 
-  }
+}
 
 }
 
@@ -218,130 +205,155 @@ async function save(table,data){
 
 async function del(table,id){
 
-  if(!confirm("Delete this record?")){
-    return;
-  }
+if(!confirm("Delete this record?"))return;
 
-  try{
+try{
 
-    await api(
-      "delete",
-      {
-        table,
-        id
-      }
-    );
+await api("delete",{
+table,
+id
+});
 
-    DB[table]=(DB[table]||[]).filter(
-      x=>String(x.ID)!==String(id)
-    );
+DB[table]=(DB[table]||[]).filter(
+x=>String(x.ID)!==String(id)
+);
 
-    persist();
+persist();
 
-    render();
+render();
 
-    toast("Deleted");
+toast("Deleted");
 
-  }catch(e){
+}catch(e){
 
-    toast(e.message);
+toast(e.message);
 
-  }
+}
 
 }
 
 
 /* ================= NAVIGATION ================= */
 
-document.querySelectorAll("[data-page]").forEach(b=>{
+document.querySelectorAll("[data-page]").forEach(button=>{
 
-  b.onclick=()=>{
+button.onclick=()=>{
 
-    document.querySelectorAll(".page").forEach(p=>{
-      p.classList.remove("active");
-    });
+document.querySelectorAll(".page").forEach(page=>{
+page.classList.remove("active");
+});
 
-    $(b.dataset.page).classList.add("active");
+$(button.dataset.page).classList.add("active");
 
-    $("sidebar").classList.remove("open");
+$("sidebar").classList.remove("open");
 
-  };
+};
 
 });
 
-
 $("menuBtn").onclick=()=>{
 
-  $("sidebar").classList.toggle("open");
+$("sidebar").classList.toggle("open");
 
 };
 
 
 /* ================= DARK MODE ================= */
 
-const savedTheme=
-localStorage.getItem("financeTheme")||"light";
+const savedTheme=localStorage.getItem("financeTheme")||"light";
 
 if(savedTheme==="dark"){
 
-  document.body.classList.add("dark");
+document.body.classList.add("dark");
 
 }
 
-function updateThemeBtn(){
+function updateTheme(){
 
-  $("themeBtn").textContent=
-  document.body.classList.contains("dark")
-  ?"☀️ Light"
-  :"🌙 Dark";
+$("themeBtn").textContent=
+document.body.classList.contains("dark")
+?"☀️ Light"
+:"🌙 Dark";
 
 }
 
-updateThemeBtn();
+updateTheme();
 
 $("themeBtn").onclick=()=>{
 
-  document.body.classList.toggle("dark");
+document.body.classList.toggle("dark");
 
-  localStorage.setItem(
-    "financeTheme",
-    document.body.classList.contains("dark")
-    ?"dark"
-    :"light"
-  );
+localStorage.setItem(
+"financeTheme",
+document.body.classList.contains("dark")
+?"dark"
+:"light"
+);
 
-  updateThemeBtn();
+updateTheme();
+
+renderCharts();
 
 };
 
 
-/* ================= HTML ITEM ================= */
+/* ================= ITEM ================= */
 
 function item(left,right,id,table){
 
-  return `
-  <div class="item">
+return `
+<div class="item">
 
-    <span>
-      ${left}
-    </span>
+<span>${left}</span>
 
-    <span>
+<span>
+${right}
+<button class="danger"
+onclick="del('${table}','${id}')">
+Delete
+</button>
+</span>
 
-      ${right}
+</div>
+`;
 
-      <button
-      class="danger"
-      onclick="del('${table}','${id}')">
+}
 
-      Delete
 
-      </button>
+/* ================= CHART ================= */
 
-    </span>
+function createChart(id,type,labels,data,label){
 
-  </div>
-  `;
+if(!window.Chart)return;
+
+if(charts[id]){
+
+charts[id].destroy();
+
+}
+
+const canvas=$(id);
+
+if(!canvas)return;
+
+charts[id]=new Chart(canvas,{
+
+type,
+
+data:{
+labels,
+datasets:[{
+label,
+data
+}]
+},
+
+options:{
+responsive:true,
+maintainAspectRatio:false
+}
+
+});
 
 }
 
@@ -350,432 +362,293 @@ function item(left,right,id,table){
 
 function render(){
 
-  const y=ym();
+const y=ym();
 
-  const p=DB.passbook||[];
-  const sal=DB.salary||[];
-  const em=DB.emi||[];
-  const sp=DB.sipPayments||[];
+const p=DB.passbook||[];
+const sal=DB.salary||[];
+const em=DB.emi||[];
+const payments=DB.sipPayments||[];
 
-  const salary=sal
-  .filter(x=>String(x.Month)===y)
-  .reduce((s,x)=>s+num(x.Amount),0);
+const salary=sal
+.filter(x=>String(x.Month)===y)
+.reduce((s,x)=>s+num(x.Amount),0);
 
-  const expense=p
-  .filter(x=>
-    String(x.Date).slice(0,7)===y &&
-    String(x.Type).toLowerCase()==="expense"
-  )
-  .reduce((s,x)=>s+num(x.Amount),0);
+const expense=p
+.filter(x=>
+String(x.Date).slice(0,7)===y &&
+String(x.Type).toLowerCase()==="expense"
+)
+.reduce((s,x)=>s+num(x.Amount),0);
 
-  const income=p
-  .filter(x=>
-    String(x.Date).slice(0,7)===y &&
-    String(x.Type).toLowerCase()==="income"
-  )
-  .reduce((s,x)=>s+num(x.Amount),0);
+const income=p
+.filter(x=>
+String(x.Date).slice(0,7)===y &&
+String(x.Type).toLowerCase()==="income"
+)
+.reduce((s,x)=>s+num(x.Amount),0);
 
-  const emi=em
-  .filter(x=>String(x.Month)===y)
-  .reduce((s,x)=>s+num(x.Amount),0);
+const emi=em
+.filter(x=>String(x.Month)===y)
+.reduce((s,x)=>s+num(x.Amount),0);
 
-  const sip=sp
-  .filter(x=>String(x.Month)===y)
-  .reduce((s,x)=>s+num(x.Amount),0);
+const sip=payments
+.filter(x=>String(x.Month)===y)
+.reduce((s,x)=>s+num(x.Amount),0);
 
 
-  const gt=getGiveTakeBalances();
+const balances=getGiveTakeBalances();
 
-  const receive=Object.values(gt)
-  .filter(x=>x.balance>0)
-  .reduce((s,x)=>s+x.balance,0);
+const receive=Object.values(balances)
+.filter(x=>x.balance>0)
+.reduce((s,x)=>s+x.balance,0);
 
-  const pay=Object.values(gt)
-  .filter(x=>x.balance<0)
-  .reduce((s,x)=>s+Math.abs(x.balance),0);
+const pay=Object.values(balances)
+.filter(x=>x.balance<0)
+.reduce((s,x)=>s+Math.abs(x.balance),0);
 
 
-  $("dash").innerHTML=[
+/* MAIN DASH */
 
-    ["💰 Salary",salary],
+$("dash").innerHTML=[
 
-    ["💸 Expense",expense],
+["💰 Salary",salary],
+["💸 Expense",expense],
+["📈 SIP Paid",sip],
+["🏦 EMI Paid",emi],
+["🤝 To Receive",receive],
+["🤝 To Pay",pay],
+["📒 Other Income",income],
+["💳 Net",salary+income-expense-emi-sip]
 
-    ["📈 SIP Paid",sip],
+].map(x=>`
 
-    ["🏦 EMI Paid",emi],
+<div class="card">
 
-    ["🤝 To Receive",receive],
+<small>${x[0]}</small>
 
-    ["🤝 To Pay",pay],
+<b>${money(x[1])}</b>
 
-    ["📒 Other Income",income],
+</div>
 
-    [
-      "💳 Net",
-      salary+income-expense-emi-sip
-    ]
+`).join("");
 
-  ].map(x=>`
 
-    <div class="card">
+renderPassbook();
 
-      <small>${x[0]}</small>
+renderSalary();
 
-      <b>${money(x[1])}</b>
+renderLoans();
 
-    </div>
+renderGiveTake();
 
-  `).join("");
+renderInvest();
 
+renderSplit();
 
-  /* PASSBOOK */
+updateDropdowns();
 
-  $("pbList").innerHTML=
-
-  p.map(x=>
-    item(
-      `${x.Date} • <b>${x.Category}</b> • ${x.Type}`,
-      money(x.Amount),
-      x.ID,
-      "passbook"
-    )
-  ).join("")
-  ||"<p>No records</p>";
-
-
-  /* SALARY */
-
-  $("salaryList").innerHTML=
-
-  sal.map(x=>
-    item(
-      `${x.Month} • ${x.Company}`,
-      money(x.Amount),
-      x.ID,
-      "salary"
-    )
-  ).join("")
-  ||"<p>No records</p>";
-
-
-  /* LOANS */
-
-  const loans=DB.loans||[];
-
-  $("emiLoan").innerHTML=
-
-  '<option value="">Select loan</option>'+
-
-  loans.map(x=>
-    `<option value="${x.ID}">
-      ${x["Loan Name"]}
-    </option>`
-  ).join("");
-
-
-  $("loanList").innerHTML=
-
-  loans.map(x=>`
-
-    <div class="item">
-
-      <span>
-
-        <b>${x["Loan Name"]}</b>
-
-        <br>
-
-        <small>
-        ${x.Remarks||""}
-        </small>
-
-      </span>
-
-      <span>
-
-        ${money(x["Initial Amount"])}
-
-      </span>
-
-    </div>
-
-  `).join("")
-  ||"<p>No loans</p>";
-
-
-  /* GIVE TAKE */
-
-  const tr=DB.transactions||[];
-
-  $("gtList").innerHTML=
-
-  tr.map(x=>
-    item(
-      `<b>${x.Person}</b> • ${x.Type}
-      <br>
-      <small>${x.Purpose||""}</small>`,
-      money(x.Amount),
-      x.ID,
-      "transactions"
-    )
-  ).join("")
-  ||"<p>No records</p>";
-
-
-  renderSuggestions();
-
-  renderSectionDashboards();
-
-  renderGiveTakeDashboard();
-
-  renderInvest();
-
-  renderSplit();
-
-  renderCharts();
+renderCharts();
 
 }
 
 
-/* ================= DASHBOARD BOX ================= */
+/* ================= PASSBOOK ================= */
 
-function ensureSummaryBox(id,anchorId){
+function renderPassbook(){
 
-  let box=$(id);
+const p=DB.passbook||[];
 
-  if(!box){
+const y=ym();
 
-    const anchor=$(anchorId);
+const income=p
+.filter(x=>
+String(x.Date).slice(0,7)===y &&
+String(x.Type).toLowerCase()==="income"
+)
+.reduce((s,x)=>s+num(x.Amount),0);
 
-    if(!anchor)return null;
+const expense=p
+.filter(x=>
+String(x.Date).slice(0,7)===y &&
+String(x.Type).toLowerCase()==="expense"
+)
+.reduce((s,x)=>s+num(x.Amount),0);
 
-    box=document.createElement("div");
+$("passbookDash").innerHTML=[
+["Income",money(income)],
+["Expense",money(expense)],
+["Net",money(income-expense)],
+["Transactions",
+p.filter(x=>String(x.Date).slice(0,7)===y).length]
+].map(x=>`
 
-    box.id=id;
+<div class="section-stat-card">
+<small>${x[0]}</small>
+<b>${x[1]}</b>
+</div>
 
-    box.className="section-dashboard";
-
-    anchor.parentNode.insertBefore(
-      box,
-      anchor
-    );
-
-  }
-
-  return box;
-
-}
+`).join("");
 
 
-function cards(arr){
-
-  return `
-
-  <div class="section-dashboard-grid">
-
-  ${arr.map(c=>`
-
-    <div class="section-stat-card">
-
-      <small>${c[0]}</small>
-
-      <b>${c[1]}</b>
-
-    </div>
-
-  `).join("")}
-
-  </div>
-
-  `;
+$("pbList").innerHTML=p
+.slice()
+.reverse()
+.map(x=>item(
+`${x.Date} • <b>${x.Category}</b> • ${x.Type}`,
+money(x.Amount),
+x.ID,
+"passbook"
+))
+.join("")||"<p>No records</p>";
 
 }
 
 
-/* ================= SECTION DASHBOARDS ================= */
+/* ================= SALARY ================= */
 
-function renderSectionDashboards(){
+function renderSalary(){
 
-  const y=ym();
+const sal=DB.salary||[];
 
-  const p=DB.passbook||[];
-  const sal=DB.salary||[];
-  const loans=DB.loans||[];
-  const em=DB.emi||[];
-  const assets=DB.assets||[];
-  const baskets=DB.baskets||[];
-  const payments=DB.sipPayments||[];
+const y=ym();
 
+const current=sal
+.filter(x=>String(x.Month)===y)
+.reduce((s,x)=>s+num(x.Amount),0);
 
-  /* PASSBOOK */
+const total=sal
+.reduce((s,x)=>s+num(x.Amount),0);
 
-  const income=p
-  .filter(x=>
-    String(x.Date).slice(0,7)===y &&
-    String(x.Type).toLowerCase()==="income"
-  )
-  .reduce((s,x)=>s+num(x.Amount),0);
+const companies=[
+...new Set(
+sal.map(x=>x.Company).filter(Boolean)
+)
+].length;
 
 
-  const expense=p
-  .filter(x=>
-    String(x.Date).slice(0,7)===y &&
-    String(x.Type).toLowerCase()==="expense"
-  )
-  .reduce((s,x)=>s+num(x.Amount),0);
+$("salaryDash").innerHTML=[
+
+["This Month",money(current)],
+["Total Recorded",money(total)],
+["Entries",sal.length],
+["Companies",companies]
+
+].map(x=>`
+
+<div class="section-stat-card">
+<small>${x[0]}</small>
+<b>${x[1]}</b>
+</div>
+
+`).join("");
 
 
-  const pbBox=
-  ensureSummaryBox(
-    "passbookDashboard",
-    "pbList"
-  );
+$("salaryList").innerHTML=sal
+.slice()
+.reverse()
+.map(x=>item(
+`${x.Month} • ${x.Company}`,
+money(x.Amount),
+x.ID,
+"salary"
+))
+.join("")||"<p>No salary records</p>";
 
-  if(pbBox){
-
-    pbBox.innerHTML=
-
-    `<h3>📒 This Month</h3>`+
-
-    cards([
-      ["Income",money(income)],
-      ["Expense",money(expense)],
-      ["Net",money(income-expense)],
-      [
-        "Transactions",
-        p.filter(x=>
-          String(x.Date).slice(0,7)===y
-        ).length
-      ]
-    ]);
-
-  }
+}
 
 
-  /* SALARY */
+/* ================= LOANS ================= */
 
-  const monthSalary=sal
-  .filter(x=>String(x.Month)===y)
-  .reduce((s,x)=>s+num(x.Amount),0);
+function renderLoans(){
 
+const loans=DB.loans||[];
 
-  const totalSalary=sal
-  .reduce((s,x)=>s+num(x.Amount),0);
+const emi=DB.emi||[];
 
+const y=ym();
 
-  const salBox=
-  ensureSummaryBox(
-    "salaryDashboard",
-    "salaryList"
-  );
+const initial=loans
+.reduce((s,x)=>s+num(x["Initial Amount"]),0);
 
-  if(salBox){
+const paidMonth=emi
+.filter(x=>String(x.Month)===y)
+.reduce((s,x)=>s+num(x.Amount),0);
 
-    salBox.innerHTML=
-
-    `<h3>💰 Salary Dashboard</h3>`+
-
-    cards([
-      ["This Month",money(monthSalary)],
-      ["Total Salary",money(totalSalary)],
-      ["Entries",sal.length],
-      [
-        "Companies",
-        new Set(
-          sal.map(x=>x.Company)
-        ).size
-      ]
-    ]);
-
-  }
+const paidTotal=emi
+.reduce((s,x)=>s+num(x.Amount),0);
 
 
-  /* LOANS */
+$("loanDash").innerHTML=[
 
-  const totalLoan=loans
-  .reduce(
-    (s,x)=>s+num(x["Initial Amount"]),
-    0
-  );
+["Initial Loans",money(initial)],
+["EMI This Month",money(paidMonth)],
+["Total EMI Paid",money(paidTotal)],
+["Loans",loans.length]
 
+].map(x=>`
 
-  const emiMonth=em
-  .filter(x=>String(x.Month)===y)
-  .reduce(
-    (s,x)=>s+num(x.Amount),
-    0
-  );
+<div class="section-stat-card">
+<small>${x[0]}</small>
+<b>${x[1]}</b>
+</div>
 
-
-  const emiTotal=em
-  .reduce(
-    (s,x)=>s+num(x.Amount),
-    0
-  );
+`).join("");
 
 
-  const loanBox=
-  ensureSummaryBox(
-    "loanDashboard",
-    "loanList"
-  );
+$("emiLoan").innerHTML=
+
+`<option value="">Select loan</option>`+
+
+loans.map(x=>`
+<option value="${x.ID}">
+${x["Loan Name"]}
+</option>
+`).join("");
 
 
-  if(loanBox){
+$("loanList").innerHTML=loans.map(x=>{
 
-    loanBox.innerHTML=
+const loanEmi=emi
+.filter(e=>e["Loan ID"]===x.ID)
+.reduce((s,e)=>s+num(e.Amount),0);
 
-    `<h3>🏦 Loans & EMI</h3>`+
+const remaining=Math.max(
+0,
+num(x["Initial Amount"])-loanEmi
+);
 
-    cards([
-      ["Initial Loans",money(totalLoan)],
-      ["EMI This Month",money(emiMonth)],
-      ["Total EMI Paid",money(emiTotal)],
-      ["Loans",loans.length]
-    ]);
+return `
 
-  }
+<div class="item">
 
+<span>
 
-  /* INVESTMENTS */
+<b>${x["Loan Name"]}</b>
 
-  const monthlyPlan=assets
-  .reduce(
-    (s,x)=>s+num(x["Monthly Amount"]),
-    0
-  );
+<br>
 
+<small>
+Initial: ${money(x["Initial Amount"])}
+<br>
+EMI Paid: ${money(loanEmi)}
+<br>
+Approx Remaining: ${money(remaining)}
+</small>
 
-  const sipPaid=payments
-  .filter(x=>String(x.Month)===y)
-  .reduce(
-    (s,x)=>s+num(x.Amount),
-    0
-  );
+</span>
 
+<button class="danger"
+onclick="del('loans','${x.ID}')">
 
-  const invBox=
-  ensureSummaryBox(
-    "investmentDashboard",
-    "basketList"
-  );
+Delete
 
+</button>
 
-  if(invBox){
+</div>
 
-    invBox.innerHTML=
+`;
 
-    `<h3>📈 Investment Dashboard</h3>`+
-
-    cards([
-      ["Monthly Planned",money(monthlyPlan)],
-      ["Paid This Month",money(sipPaid)],
-      ["Pending",money(Math.max(0,monthlyPlan-sipPaid))],
-      ["Baskets",baskets.length]
-    ]);
-
-  }
+}).join("")||"<p>No loans</p>";
 
 }
 
@@ -784,166 +657,910 @@ function renderSectionDashboards(){
 
 function getGiveTakeBalances(){
 
-  const out={};
+const out={};
 
-  (DB.transactions||[]).forEach(x=>{
+(DB.transactions||[]).forEach(x=>{
 
-    const person=
-    String(x.Person||"Unknown").trim();
+const person=String(x.Person||"Unknown").trim();
 
-    if(!out[person]){
+if(!out[person]){
 
-      out[person]={
-        person,
-        balance:0,
-        given:0,
-        received:0,
-        taken:0,
-        paid:0
-      };
+out[person]={
+person,
+balance:0,
+given:0,
+received:0,
+taken:0,
+paid:0
+};
 
-    }
+}
 
+const amount=num(x.Amount);
 
-    const type=
-    String(x.Type||"")
-    .toLowerCase()
-    .trim();
+const type=String(x.Type||"").toLowerCase();
 
-
-    const amount=num(x.Amount);
-
-    const p=out[person];
+const p=out[person];
 
 
-    if(type==="give"){
+/*
+Positive = Person owes YOU.
+Negative = YOU owe person.
+*/
 
-      p.balance+=amount;
+if(type==="give"){
 
-      p.given+=amount;
+p.balance+=amount;
+p.given+=amount;
 
-    }
+}
 
-    else if(type==="receive"){
+else if(type==="receive"){
 
-      p.balance-=amount;
+p.balance-=amount;
+p.received+=amount;
 
-      p.received+=amount;
+}
 
-    }
+else if(type==="take"){
 
-    else if(type==="take"){
+p.balance-=amount;
+p.taken+=amount;
 
-      p.balance-=amount;
+}
 
-      p.taken+=amount;
+else if(type==="pay"){
 
-    }
+p.balance+=amount;
+p.paid+=amount;
 
-    else if(type==="pay"){
+}
 
-      p.balance+=amount;
+});
 
-      p.paid+=amount;
-
-    }
-
-  });
-
-  return out;
+return out;
 
 }
 
 
-function renderGiveTakeDashboard(){
+function renderGiveTake(){
 
-  const list=
-  Object.values(
-    getGiveTakeBalances()
-  ).sort(
-    (a,b)=>
-    Math.abs(b.balance)-
-    Math.abs(a.balance)
-  );
+const balances=getGiveTakeBalances();
 
+const list=Object.values(balances);
 
-  let box=$("gtDashboard");
+const receive=list
+.filter(x=>x.balance>0)
+.reduce((s,x)=>s+x.balance,0);
 
-  if(!box){
-
-    box=document.createElement("div");
-
-    box.id="gtDashboard";
-
-    $("gtList").parentNode.insertBefore(
-      box,
-      $("gtList")
-    );
-
-  }
+const pay=list
+.filter(x=>x.balance<0)
+.reduce((s,x)=>s+Math.abs(x.balance),0);
 
 
-  if(!list.length){
+$("giveDash").innerHTML=[
 
-    box.innerHTML="";
+["To Receive",money(receive)],
+["To Pay",money(pay)],
+["Net",money(receive-pay)],
+["People",list.length]
 
-    return;
+].map(x=>`
 
-  }
+<div class="section-stat-card">
+<small>${x[0]}</small>
+<b>${x[1]}</b>
+</div>
 
-
-  box.innerHTML=
-
-  `<h3>👤 Individual Dashboard</h3>
-
-  <div class="summary-grid">
-
-  ${list.map(p=>{
-
-    const status=
-
-    p.balance>0
-    ?"To Receive"
-    :p.balance<0
-    ?"To Pay"
-    :"Settled";
+`).join("");
 
 
-    return `
+$("gtDashboard").innerHTML=list
+.sort((a,b)=>Math.abs(b.balance)-Math.abs(a.balance))
+.map(p=>{
 
-    <div class="card person-card">
+const status=
+p.balance>0
+?"To Receive"
+:p.balance<0
+?"To Pay"
+:"Settled";
 
-      <small>${p.person}</small>
+return `
 
-      <b>
-      ${money(Math.abs(p.balance))}
-      </b>
+<div class="card person-card">
 
-      <span class="balance-label">
-      ${status}
-      </span>
+<small>${p.person}</small>
 
-      <small>
+<b>${money(Math.abs(p.balance))}</b>
 
-      Given ${money(p.given)}
+<span class="balance-label">
+${status}
+</span>
 
-      • Received ${money(p.received)}
+<small>
 
-      <br>
+Given ${money(p.given)}
+<br>
 
-      Taken ${money(p.taken)}
+Received ${money(p.received)}
+<br>
 
-      • Paid ${money(p.paid)}
+Taken ${money(p.taken)}
+<br>
 
-      </small>
+Paid ${money(p.paid)}
 
-    </div>
+</small>
 
-    `;
+</div>
 
-  }).join("")}
+`;
 
-  </div>`;
+}).join("")||"<p>No balances</p>";
+
+
+$("gtList").innerHTML=(DB.transactions||[])
+.slice()
+.reverse()
+.map(x=>item(
+`<b>${x.Person}</b> • ${x.Type}<br>
+<small>${x.Purpose||""}</small>`,
+money(x.Amount),
+x.ID,
+"transactions"
+))
+.join("")||"<p>No records</p>";
+
+}
+
+
+/* ================= INVESTMENTS ================= */
+
+function renderInvest(){
+
+const baskets=DB.baskets||[];
+const people=DB.people||[];
+const assets=DB.assets||[];
+const payments=DB.sipPayments||[];
+
+const planned=assets
+.reduce((s,x)=>s+num(x["Monthly Amount"]),0);
+
+const paid=payments
+.filter(x=>String(x.Month)===ym())
+.reduce((s,x)=>s+num(x.Amount),0);
+
+
+$("investmentDash").innerHTML=[
+
+["Monthly Planned",money(planned)],
+["Paid This Month",money(paid)],
+["Pending",money(Math.max(0,planned-paid))],
+["Baskets",baskets.length]
+
+].map(x=>`
+
+<div class="section-stat-card">
+<small>${x[0]}</small>
+<b>${x[1]}</b>
+</div>
+
+`).join("");
+
+
+$("assetBasket").innerHTML=
+
+`<option value="">Select basket</option>`+
+
+baskets.map(b=>{
+
+const person=people.find(
+p=>p.ID===b["Person ID"]
+);
+
+return `
+
+<option value="${b.ID}">
+${person?person.Name:""} — ${b["Basket Name"]}
+</option>
+
+`;
+
+}).join("");
+
+
+$("basketList").innerHTML=baskets.map(b=>{
+
+const person=people.find(
+p=>p.ID===b["Person ID"]
+);
+
+const basketAssets=assets.filter(
+a=>a["Basket ID"]===b.ID
+);
+
+const total=basketAssets
+.reduce((s,x)=>s+num(x["Monthly Amount"]),0);
+
+const done=payments.some(
+x=>x["Basket ID"]===b.ID &&
+x.Month===ym()
+);
+
+return `
+
+<div class="item">
+
+<span>
+
+<b>
+${person?person.Name:""} —
+${b["Basket Name"]}
+</b>
+
+<br>
+
+<small>
+
+${basketAssets.map(a=>
+`${a["Asset Name"]} ${money(a["Monthly Amount"])}`
+).join(" • ")||"No assets"}
+
+</small>
+
+</span>
+
+<span>
+
+${money(total)}
+
+<br>
+
+${done
+?"✓ PAID"
+:`<button onclick="markBasket('${b.ID}',${total})">
+Mark Paid
+</button>`
+}
+
+</span>
+
+</div>
+
+`;
+
+}).join("")||"<p>No baskets</p>";
+
+}
+
+
+/* ================= SPLITTER ================= */
+
+function groupMembers(group){
+
+try{
+
+return JSON.parse(
+group["Members JSON"]||"[]"
+);
+
+}catch(e){
+
+return [];
+
+}
+
+}
+
+
+function calculateSplitGroup(group){
+
+const members=groupMembers(group);
+
+const expenses=(DB.splitExpenses||[])
+.filter(x=>x["Group ID"]===group.ID);
+
+const stats={};
+
+members.forEach(name=>{
+
+stats[name]={
+name,
+paid:0,
+share:0,
+net:0
+};
+
+});
+
+
+let total=0;
+
+
+expenses.forEach(expense=>{
+
+const amount=num(expense.Amount);
+
+total+=amount;
+
+const paidBy=String(
+expense["Paid By"]||""
+);
+
+if(!stats[paidBy]){
+
+stats[paidBy]={
+name:paidBy,
+paid:0,
+share:0,
+net:0
+};
+
+}
+
+stats[paidBy].paid+=amount;
+
+
+let participants=[];
+
+try{
+
+participants=JSON.parse(
+expense["Members JSON"]||"[]"
+);
+
+}catch(e){}
+
+
+if(!participants.length){
+
+participants=members;
+
+}
+
+
+const share=
+participants.length
+?amount/participants.length
+:0;
+
+
+participants.forEach(person=>{
+
+if(!stats[person]){
+
+stats[person]={
+name:person,
+paid:0,
+share:0,
+net:0
+};
+
+}
+
+stats[person].share+=share;
+
+});
+
+});
+
+
+Object.values(stats).forEach(x=>{
+
+x.net=x.paid-x.share;
+
+});
+
+
+return {
+total,
+expenses,
+stats:Object.values(stats)
+};
+
+}
+
+
+/* WHO PAYS WHOM */
+
+function calculateSettlements(stats){
+
+let creditors=stats
+.filter(x=>x.net>0.01)
+.map(x=>({
+name:x.name,
+amount:x.net
+}));
+
+let debtors=stats
+.filter(x=>x.net<-0.01)
+.map(x=>({
+name:x.name,
+amount:-x.net
+}));
+
+const result=[];
+
+let i=0;
+let j=0;
+
+
+while(
+i<debtors.length &&
+j<creditors.length
+){
+
+const amount=Math.min(
+debtors[i].amount,
+creditors[j].amount
+);
+
+result.push({
+
+from:debtors[i].name,
+
+to:creditors[j].name,
+
+amount
+
+});
+
+
+debtors[i].amount-=amount;
+
+creditors[j].amount-=amount;
+
+
+if(debtors[i].amount<0.01)i++;
+
+if(creditors[j].amount<0.01)j++;
+
+}
+
+
+return result;
+
+}
+
+
+function renderSplit(){
+
+const groups=DB.splitGroups||[];
+
+const previous=$("spGroupSel").value;
+
+
+$("spGroupSel").innerHTML=
+
+`<option value="">Select group</option>`+
+
+groups.map(g=>`
+
+<option value="${g.ID}">
+${g["Group Name"]}
+</option>
+
+`).join("");
+
+
+if(
+previous &&
+groups.some(g=>g.ID===previous)
+){
+
+$("spGroupSel").value=previous;
+
+}
+
+else if(groups.length){
+
+$("spGroupSel").value=groups[0].ID;
+
+}
+
+
+const selected=groups.find(
+g=>g.ID===$("spGroupSel").value
+);
+
+
+const members=selected
+?groupMembers(selected)
+:[];
+
+
+$("spPaidBy").innerHTML=
+
+`<option value="">Paid by</option>`+
+
+members.map(m=>`
+
+<option value="${m}">
+${m}
+</option>
+
+`).join("");
+
+
+if(selected){
+
+const calc=calculateSplitGroup(selected);
+
+
+$("splitSummary").innerHTML=`
+
+<div class="card">
+
+<small>Total Expenses</small>
+
+<b>${money(calc.total)}</b>
+
+</div>
+
+
+<div class="card">
+
+<small>Expenses</small>
+
+<b>${calc.expenses.length}</b>
+
+</div>
+
+
+${calc.stats.map(s=>{
+
+const status=
+
+s.net>0
+?"Should Receive"
+:s.net<0
+?"Should Pay"
+:"Settled";
+
+
+return `
+
+<div class="card person-card">
+
+<small>${s.name}</small>
+
+<b>${money(Math.abs(s.net))}</b>
+
+<span class="balance-label">
+${status}
+</span>
+
+<small>
+
+Paid ${money(s.paid)}
+<br>
+
+Share ${money(s.share)}
+
+</small>
+
+</div>
+
+`;
+
+}).join("")}
+
+`;
+
+
+const settlements=
+calculateSettlements(calc.stats);
+
+
+$("settlementList").innerHTML=
+
+settlements.map((s,index)=>`
+
+<div class="item">
+
+<span>
+
+<b>${s.from}</b>
+
+→
+
+<b>${s.to}</b>
+
+</span>
+
+<span>
+
+<b>${money(s.amount)}</b>
+
+<button class="success"
+onclick="settleSplit('${selected.ID}',${index})">
+
+Mark Settled
+
+</button>
+
+</span>
+
+</div>
+
+`).join("")
+||"<p>🎉 Everyone is settled!</p>";
+
+
+}else{
+
+$("splitSummary").innerHTML="";
+
+$("settlementList").innerHTML=
+"<p>Select a group</p>";
+
+}
+
+
+$("splitList").innerHTML=groups.map(group=>{
+
+const calc=calculateSplitGroup(group);
+
+return `
+
+<div class="card">
+
+<b>${group["Group Name"]}</b>
+
+<p class="muted">
+
+${groupMembers(group).join(", ")}
+
+</p>
+
+<div class="item">
+
+<span>Total Spent</span>
+
+<span>${money(calc.total)}</span>
+
+</div>
+
+<p>
+
+${calc.stats.map(s=>`
+
+${s.name}:
+${s.net>=0?"Receive":"Pay"}
+${money(Math.abs(s.net))}
+
+`).join(" • ")}
+
+</p>
+
+</div>
+
+`;
+
+}).join("")||"<p>No groups</p>";
+
+}
+
+
+/* ================= SETTLE SPLIT ================= */
+
+/*
+Settlement is stored as a new split expense.
+It does not affect total group expenses.
+Instead we create a settlement transaction table record.
+*/
+
+async function settleSplit(groupId,index){
+
+const group=(DB.splitGroups||[])
+.find(x=>x.ID===groupId);
+
+if(!group)return;
+
+
+const calc=calculateSplitGroup(group);
+
+const settlements=
+calculateSettlements(calc.stats);
+
+const settlement=settlements[index];
+
+if(!settlement)return;
+
+
+if(!confirm(
+`${settlement.from} paid ${money(settlement.amount)} to ${settlement.to}?`
+)){
+return;
+}
+
+
+/*
+Store as Give/Take record for permanent history.
+*/
+
+await save("transactions",{
+
+ID:uid(),
+
+Person:settlement.to,
+
+Type:"Receive",
+
+Amount:settlement.amount,
+
+Date:today(),
+
+Purpose:
+`Splitter Settlement from ${settlement.from}`,
+
+Notes:
+`Group: ${group["Group Name"]}`,
+
+Revisions:"[]"
+
+});
+
+
+await save("transactions",{
+
+ID:uid(),
+
+Person:settlement.from,
+
+Type:"Pay",
+
+Amount:settlement.amount,
+
+Date:today(),
+
+Purpose:
+`Splitter Settlement to ${settlement.to}`,
+
+Notes:
+`Group: ${group["Group Name"]}`,
+
+Revisions:"[]"
+
+});
+
+
+toast("✓ Settlement recorded");
+
+}
+
+
+/* ================= DROPDOWNS ================= */
+
+function fillList(id,values){
+
+const unique=[
+...new Set(
+values
+.filter(Boolean)
+.map(x=>String(x).trim())
+)
+];
+
+$(id).innerHTML=
+unique.map(x=>`
+<option value="${x}">
+`).join("");
+
+}
+
+
+function updateDropdowns(){
+
+const passbook=DB.passbook||[];
+
+fillList(
+"categoryList",
+passbook.map(x=>x.Category)
+);
+
+fillList(
+"accountList",
+passbook.map(x=>x.Account)
+);
+
+fillList(
+"remarksList",
+passbook.map(x=>x.Remarks)
+);
+
+
+const salary=DB.salary||[];
+
+fillList(
+"companyList",
+salary.map(x=>x.Company)
+);
+
+fillList(
+"salaryRemarksList",
+salary.map(x=>x.Remarks)
+);
+
+
+const loans=DB.loans||[];
+
+fillList(
+"loanNameList",
+loans.map(x=>x["Loan Name"])
+);
+
+fillList(
+"loanRemarksList",
+loans.map(x=>x.Remarks)
+);
+
+
+const emi=DB.emi||[];
+
+fillList(
+"emiRemarksList",
+emi.map(x=>x.Remarks)
+);
+
+
+const transactions=DB.transactions||[];
+
+fillList(
+"personList",
+transactions.map(x=>x.Person)
+);
+
+fillList(
+"purposeList",
+transactions.map(x=>x.Purpose)
+);
+
+fillList(
+"notesList",
+transactions.map(x=>x.Notes)
+);
+
+
+const groups=DB.splitGroups||[];
+
+fillList(
+"groupNameList",
+groups.map(x=>x["Group Name"])
+);
+
+
+const expenses=DB.splitExpenses||[];
+
+fillList(
+"expenseTitleList",
+expenses.map(x=>x.Title)
+);
+
+
+const people=DB.people||[];
+
+fillList(
+"investmentPersonList",
+people.map(x=>x.Name)
+);
+
+
+const baskets=DB.baskets||[];
+
+fillList(
+"basketNameList",
+baskets.map(x=>x["Basket Name"])
+);
+
+
+const assets=DB.assets||[];
+
+fillList(
+"assetNameList",
+assets.map(x=>x["Asset Name"])
+);
 
 }
 
@@ -952,1200 +1569,515 @@ function renderGiveTakeDashboard(){
 
 function addPassbook(){
 
-  return save(
-    "passbook",
-    {
-      ID:uid(),
-      Date:$("pbDate").value||today(),
-      Type:$("pbType").value,
-      Category:$("pbCat").value,
-      Amount:num($("pbAmt").value),
-      Account:$("pbAccount").value,
-      Remarks:$("pbRemarks").value
-    }
-  );
+return save("passbook",{
+
+ID:uid(),
+
+Date:$("pbDate").value||today(),
+
+Type:$("pbType").value,
+
+Category:$("pbCat").value,
+
+Amount:num($("pbAmt").value),
+
+Account:$("pbAccount").value,
+
+Remarks:$("pbRemarks").value
+
+});
 
 }
 
 
 function addSalary(){
 
-  return save(
-    "salary",
-    {
-      ID:uid(),
-      Month:$("salMonth").value||ym(),
-      Company:$("salCompany").value,
-      Amount:num($("salAmount").value),
-      Remarks:$("salRemarks").value
-    }
-  );
+return save("salary",{
+
+ID:uid(),
+
+Month:$("salMonth").value||ym(),
+
+Company:$("salCompany").value,
+
+Amount:num($("salAmount").value),
+
+Remarks:$("salRemarks").value
+
+});
 
 }
 
 
 function addLoan(){
 
-  return save(
-    "loans",
-    {
-      ID:uid(),
-      "Loan Name":$("loanName").value,
-      "Initial Amount":
-      num($("loanInitial").value),
-      Remarks:$("loanRemarks").value
-    }
-  );
+return save("loans",{
+
+ID:uid(),
+
+"Loan Name":$("loanName").value,
+
+"Initial Amount":num($("loanInitial").value),
+
+Remarks:$("loanRemarks").value
+
+});
 
 }
 
 
 function addEmi(){
 
-  if(!$("emiLoan").value){
+if(!$("emiLoan").value){
 
-    toast("Select loan");
+toast("Select loan");
 
-    return;
+return;
 
-  }
+}
 
-  return save(
-    "emi",
-    {
-      ID:uid(),
-      "Loan ID":$("emiLoan").value,
-      Month:$("emiMonth").value||ym(),
-      Amount:num($("emiAmount").value),
-      Remarks:$("emiRemarks").value
-    }
-  );
+
+return save("emi",{
+
+ID:uid(),
+
+"Loan ID":$("emiLoan").value,
+
+Month:$("emiMonth").value||ym(),
+
+Amount:num($("emiAmount").value),
+
+Remarks:$("emiRemarks").value
+
+});
 
 }
 
 
 function addGive(){
 
-  return save(
-    "transactions",
-    {
-      ID:uid(),
-      Person:$("gtPerson").value,
-      Type:$("gtType").value,
-      Amount:num($("gtAmount").value),
-      Date:$("gtDate").value||today(),
-      Purpose:$("gtPurpose").value,
-      Notes:$("gtNotes").value,
-      Revisions:"[]"
-    }
-  );
+return save("transactions",{
+
+ID:uid(),
+
+Person:$("gtPerson").value,
+
+Type:$("gtType").value,
+
+Amount:num($("gtAmount").value),
+
+Date:$("gtDate").value||today(),
+
+Purpose:$("gtPurpose").value,
+
+Notes:$("gtNotes").value,
+
+Revisions:"[]"
+
+});
 
 }
 
 
-/* ================= INVESTMENTS ================= */
+/* ================= INVESTMENT ADD ================= */
 
 async function addBasket(){
 
-  const name=
-  $("sipPerson").value.trim();
+const name=$("sipPerson").value.trim();
 
-  const basket=
-  $("sipBasket").value.trim();
+const basket=$("sipBasket").value.trim();
 
 
-  if(!name||!basket){
+if(!name||!basket){
 
-    toast("Enter person and basket");
+toast("Enter person and basket");
 
-    return;
+return;
 
-  }
-
-
-  let person=
-  (DB.people||[])
-  .find(
-    x=>
-    String(x.Name)
-    .toLowerCase()===
-    name.toLowerCase()
-  );
+}
 
 
-  if(!person){
-
-    person=await save(
-      "people",
-      {
-        ID:uid(),
-        Name:name
-      }
-    );
-
-  }
+let person=(DB.people||[]).find(
+x=>String(x.Name).toLowerCase()===
+name.toLowerCase()
+);
 
 
-  await save(
-    "baskets",
-    {
-      ID:uid(),
-      "Person ID":person.ID,
-      "Basket Name":basket
-    }
-  );
+if(!person){
+
+person=await save("people",{
+
+ID:uid(),
+
+Name:name
+
+});
+
+}
+
+
+await save("baskets",{
+
+ID:uid(),
+
+"Person ID":person.ID,
+
+"Basket Name":basket
+
+});
 
 }
 
 
 function addAsset(){
 
-  if(!$("assetBasket").value){
+if(!$("assetBasket").value){
 
-    toast("Select basket");
+toast("Select basket");
 
-    return;
-
-  }
-
-
-  return save(
-    "assets",
-    {
-      ID:uid(),
-      "Basket ID":
-      $("assetBasket").value,
-
-      "Asset Name":
-      $("assetName").value,
-
-      "Asset Type":
-      $("assetType").value,
-
-      "Monthly Amount":
-      num($("assetAmount").value)
-    }
-  );
+return;
 
 }
 
 
-function renderInvest(){
+return save("assets",{
 
-  const baskets=DB.baskets||[];
+ID:uid(),
 
-  const people=DB.people||[];
+"Basket ID":$("assetBasket").value,
 
-  const assets=DB.assets||[];
+"Asset Name":$("assetName").value,
 
-  const payments=
-  DB.sipPayments||[];
+"Asset Type":$("assetType").value,
 
+"Monthly Amount":num($("assetAmount").value)
 
-  $("assetBasket").innerHTML=
-
-  '<option value="">Select basket</option>'+
-
-  baskets.map(b=>{
-
-    const person=
-    people.find(
-      x=>x.ID===b["Person ID"]
-    );
-
-    return `
-
-    <option value="${b.ID}">
-
-    ${person?person.Name:""}
-
-    — ${b["Basket Name"]}
-
-    </option>
-
-    `;
-
-  }).join("");
-
-
-  $("basketList").innerHTML=
-
-  baskets.map(b=>{
-
-    const person=
-    people.find(
-      x=>x.ID===b["Person ID"]
-    );
-
-
-    const assetsForBasket=
-
-    assets.filter(
-      x=>x["Basket ID"]===b.ID
-    );
-
-
-    const total=
-
-    assetsForBasket.reduce(
-      (s,x)=>
-      s+num(x["Monthly Amount"]),
-      0
-    );
-
-
-    const done=
-
-    payments.some(
-      x=>
-      x["Basket ID"]===b.ID &&
-      x.Month===ym()
-    );
-
-
-    return `
-
-    <div class="item">
-
-      <span>
-
-      <b>
-
-      ${person?person.Name:""}
-
-      — ${b["Basket Name"]}
-
-      </b>
-
-      <br>
-
-      <small>
-
-      ${assetsForBasket.map(
-        x=>
-        `${x["Asset Name"]}
-        ${money(x["Monthly Amount"])}`
-      ).join(" • ")||"No assets"}
-
-      </small>
-
-      </span>
-
-
-      <span>
-
-      ${money(total)}
-
-      <br>
-
-      ${
-        done
-        ?"✓ PAID"
-        :`<button onclick="markBasket('${b.ID}',${total})">
-        Mark Paid
-        </button>`
-      }
-
-      </span>
-
-    </div>
-
-    `;
-
-  }).join("")
-  ||"<p>No baskets</p>";
+});
 
 }
 
 
 function markBasket(id,total){
 
-  return save(
-    "sipPayments",
-    {
-      ID:uid(),
-      "Basket ID":id,
-      Month:ym(),
-      Amount:total,
-      "Paid At":
-      new Date().toISOString()
-    }
-  );
+return save("sipPayments",{
+
+ID:uid(),
+
+"Basket ID":id,
+
+Month:ym(),
+
+Amount:total,
+
+"Paid At":new Date().toISOString()
+
+});
 
 }
 
 
-/* ================= SPLITTER ================= */
+/* ================= GROUP ================= */
 
 async function addGroup(){
 
-  const name=
-  $("spGroup").value.trim();
+const name=$("spGroup").value.trim();
 
-  const members=
-
-  $("spMembers").value
-  .split(",")
-  .map(x=>x.trim())
-  .filter(Boolean);
+const members=$("spMembers").value
+.split(",")
+.map(x=>x.trim())
+.filter(Boolean);
 
 
-  if(!name){
+if(!name){
 
-    toast("Enter group name");
+toast("Enter group name");
 
-    return;
-
-  }
-
-
-  if(members.length<2){
-
-    toast("Minimum 2 members");
-
-    return;
-
-  }
-
-
-  await save(
-    "splitGroups",
-    {
-      ID:uid(),
-
-      "Group Name":name,
-
-      Category:$("spCat").value,
-
-      "Members JSON":
-      JSON.stringify(members)
-    }
-  );
+return;
 
 }
 
 
-function groupMembers(g){
+if(members.length<2){
 
-  try{
+toast("Minimum 2 members required");
 
-    return JSON.parse(
-      g["Members JSON"]||"[]"
-    );
-
-  }catch(e){
-
-    return [];
-
-  }
+return;
 
 }
 
 
-function calculateSplitGroup(group){
+const group=await save("splitGroups",{
 
-  const members=
-  groupMembers(group);
+ID:uid(),
 
+"Group Name":name,
 
-  const expenses=
+Category:$("spCat").value,
 
-  (DB.splitExpenses||[])
-  .filter(
-    x=>x["Group ID"]===group.ID
-  );
+"Members JSON":JSON.stringify(members)
 
+});
 
-  const stats={};
 
+$("spGroup").value="";
 
-  members.forEach(m=>{
+$("spMembers").value="";
 
-    stats[m]={
-      name:m,
-      paid:0,
-      share:0,
-      net:0
-    };
 
-  });
+$("spGroupSel").value=group.ID;
 
-
-  let total=0;
-
-
-  expenses.forEach(e=>{
-
-    const amount=num(e.Amount);
-
-    total+=amount;
-
-
-    const paidBy=
-    String(e["Paid By"]||"");
-
-
-    if(stats[paidBy]){
-
-      stats[paidBy].paid+=amount;
-
-    }
-
-
-    let participants=[];
-
-    try{
-
-      participants=
-      JSON.parse(
-        e["Members JSON"]||"[]"
-      );
-
-    }catch(err){}
-
-
-    if(!participants.length){
-
-      participants=members;
-
-    }
-
-
-    const each=
-
-    amount/
-    participants.length;
-
-
-    participants.forEach(m=>{
-
-      if(stats[m]){
-
-        stats[m].share+=each;
-
-      }
-
-    });
-
-  });
-
-
-  Object.values(stats)
-  .forEach(s=>{
-
-    s.net=s.paid-s.share;
-
-  });
-
-
-  return {
-    total,
-    expenses,
-    stats:Object.values(stats)
-  };
-
-}
-
-
-function renderSplit(){
-
-  const groups=
-  DB.splitGroups||[];
-
-
-  const previous=
-  $("spGroupSel").value;
-
-
-  $("spGroupSel").innerHTML=
-
-  '<option value="">Select group</option>'+
-
-  groups.map(g=>
-    `<option value="${g.ID}">
-    ${g["Group Name"]}
-    </option>`
-  ).join("");
-
-
-  if(
-    previous &&
-    groups.some(
-      g=>g.ID===previous
-    )
-  ){
-
-    $("spGroupSel").value=
-    previous;
-
-  }
-
-  else if(groups.length){
-
-    $("spGroupSel").value=
-    groups[0].ID;
-
-  }
-
-
-  const selected=
-
-  groups.find(
-    x=>x.ID===$("spGroupSel").value
-  );
-
-
-  const members=
-
-  selected
-  ?groupMembers(selected)
-  :[];
-
-
-  $("spPaidBy").innerHTML=
-
-  '<option value="">Paid by</option>'+
-
-  members.map(
-    x=>`<option>${x}</option>`
-  ).join("");
-
-
-  let summaryBox=
-  $("splitSummary");
-
-
-  if(!summaryBox){
-
-    summaryBox=
-    document.createElement("div");
-
-    summaryBox.id="splitSummary";
-
-    $("splitList")
-    .parentNode
-    .insertBefore(
-      summaryBox,
-      $("splitList")
-    );
-
-  }
-
-
-  if(selected){
-
-    const c=
-    calculateSplitGroup(
-      selected
-    );
-
-
-    summaryBox.innerHTML=
-
-    `<h3>
-    📊 ${selected["Group Name"]} Summary
-    </h3>
-
-    <div class="summary-grid">
-
-    <div class="card">
-
-    <small>Total Expense</small>
-
-    <b>${money(c.total)}</b>
-
-    </div>
-
-
-    <div class="card">
-
-    <small>Expenses</small>
-
-    <b>${c.expenses.length}</b>
-
-    </div>
-
-
-    ${c.stats.map(s=>{
-
-      const status=
-
-      s.net>0
-      ?"Should Receive"
-      :s.net<0
-      ?"Should Pay"
-      :"Settled";
-
-
-      return `
-
-      <div class="card">
-
-      <small>${s.name}</small>
-
-      <b>
-      ${money(Math.abs(s.net))}
-      </b>
-
-      <span class="balance-label">
-
-      ${status}
-
-      </span>
-
-      <small>
-
-      Paid ${money(s.paid)}
-
-      • Share ${money(s.share)}
-
-      </small>
-
-      </div>
-
-      `;
-
-    }).join("")}
-
-    </div>`;
-
-  }
-
-  else{
-
-    summaryBox.innerHTML="";
-
-  }
-
-
-  $("splitList").innerHTML=
-
-  groups.map(g=>{
-
-    const c=
-    calculateSplitGroup(g);
-
-
-    return `
-
-    <div class="card">
-
-    <b>
-    ${g["Group Name"]}
-    </b>
-
-    <p class="muted">
-
-    ${groupMembers(g).join(", ")}
-
-    </p>
-
-
-    <div class="item">
-
-    <span>Total Spent</span>
-
-    <span>
-    ${money(c.total)}
-    </span>
-
-    </div>
-
-    </div>
-
-    `;
-
-  }).join("")
-  ||"<p>No groups</p>";
+renderSplit();
 
 }
 
 
 async function addSplitExpense(){
 
-  const group=
-
-  (DB.splitGroups||[])
-  .find(
-    x=>x.ID===$("spGroupSel").value
-  );
+const group=(DB.splitGroups||[])
+.find(x=>x.ID===$("spGroupSel").value);
 
 
-  if(!group){
+if(!group){
 
-    toast("Select group");
+toast("Select group");
 
-    return;
-
-  }
-
-
-  if(
-    num(
-      $("spAmount").value
-    )<=0
-  ){
-
-    toast("Enter amount");
-
-    return;
-
-  }
-
-
-  let members=
-
-  $("spMembersSel").value
-  .split(",")
-  .map(x=>x.trim())
-  .filter(Boolean);
-
-
-  if(!members.length){
-
-    members=
-    groupMembers(group);
-
-  }
-
-
-  await save(
-    "splitExpenses",
-    {
-      ID:uid(),
-
-      "Group ID":group.ID,
-
-      Title:$("spTitle").value,
-
-      Amount:num(
-        $("spAmount").value
-      ),
-
-      "Paid By":
-      $("spPaidBy").value,
-
-      "Members JSON":
-      JSON.stringify(members),
-
-      Date:today()
-    }
-  );
+return;
 
 }
 
 
-$("spGroupSel").onchange=
-renderSplit;
+const amount=num($("spAmount").value);
 
 
-/* ================= SUGGESTIONS ================= */
+if(amount<=0){
 
-function fillDatalist(id,values){
+toast("Enter valid amount");
 
-  const el=$(id);
-
-  if(!el)return;
-
-  const unique=[
-    ...new Set(
-      values
-      .map(x=>String(x||"").trim())
-      .filter(Boolean)
-    )
-  ];
-
-  el.innerHTML=
-
-  unique.map(
-    v=>`<option value="${v}">`
-  ).join("");
+return;
 
 }
 
 
-function renderSuggestions(){
-
-  const p=DB.passbook||[];
-
-  const sal=DB.salary||[];
-
-  const loans=DB.loans||[];
-
-  const tr=DB.transactions||[];
-
-  const groups=
-  DB.splitGroups||[];
-
-  const people=DB.people||[];
-
-  const baskets=
-  DB.baskets||[];
-
-  const assets=DB.assets||[];
+let members=$("spMembersSel").value
+.split(",")
+.map(x=>x.trim())
+.filter(Boolean);
 
 
-  fillDatalist(
-    "categorySuggestions",
-    p.map(x=>x.Category)
-  );
+if(!members.length){
 
-  fillDatalist(
-    "accountSuggestions",
-    p.map(x=>x.Account)
-  );
-
-  fillDatalist(
-    "remarkSuggestions",
-    p.map(x=>x.Remarks)
-  );
-
-  fillDatalist(
-    "companySuggestions",
-    sal.map(x=>x.Company)
-  );
-
-  fillDatalist(
-    "salaryRemarkSuggestions",
-    sal.map(x=>x.Remarks)
-  );
-
-  fillDatalist(
-    "loanSuggestions",
-    loans.map(x=>x["Loan Name"])
-  );
-
-  fillDatalist(
-    "loanRemarkSuggestions",
-    loans.map(x=>x.Remarks)
-  );
-
-  fillDatalist(
-    "personSuggestions",
-    tr.map(x=>x.Person)
-  );
-
-  fillDatalist(
-    "purposeSuggestions",
-    tr.map(x=>x.Purpose)
-  );
-
-  fillDatalist(
-    "groupSuggestions",
-    groups.map(x=>x["Group Name"])
-  );
-
-  fillDatalist(
-    "investmentPersonSuggestions",
-    people.map(x=>x.Name)
-  );
-
-  fillDatalist(
-    "basketSuggestions",
-    baskets.map(x=>x["Basket Name"])
-  );
-
-  fillDatalist(
-    "assetSuggestions",
-    assets.map(x=>x["Asset Name"])
-  );
+members=groupMembers(group);
 
 }
+
+
+await save("splitExpenses",{
+
+ID:uid(),
+
+"Group ID":group.ID,
+
+Title:$("spTitle").value,
+
+Amount:amount,
+
+"Paid By":$("spPaidBy").value,
+
+"Members JSON":JSON.stringify(members),
+
+Date:today()
+
+});
+
+
+$("spTitle").value="";
+
+$("spAmount").value="";
+
+$("spMembersSel").value="";
+
+}
+
+
+$("spGroupSel").onchange=renderSplit;
 
 
 /* ================= CHARTS ================= */
 
-function destroyChart(id){
-
-  if(charts[id]){
-
-    charts[id].destroy();
-
-    delete charts[id];
-
-  }
-
-}
-
-
 function renderCharts(){
 
-  if(typeof Chart==="undefined"){
-    return;
-  }
+const y=ym();
 
+const p=DB.passbook||[];
 
-  const p=DB.passbook||[];
+const sal=DB.salary||[];
 
-  const sal=DB.salary||[];
+const loans=DB.loans||[];
 
-  const em=DB.emi||[];
+const emi=DB.emi||[];
 
+const assets=DB.assets||[];
 
-  /* INCOME VS EXPENSE */
 
-  const months={};
+/* MAIN */
 
+const income=p
+.filter(x=>
+String(x.Date).slice(0,7)===y &&
+String(x.Type).toLowerCase()==="income"
+)
+.reduce((s,x)=>s+num(x.Amount),0);
 
-  p.forEach(x=>{
+const expense=p
+.filter(x=>
+String(x.Date).slice(0,7)===y &&
+String(x.Type).toLowerCase()==="expense"
+)
+.reduce((s,x)=>s+num(x.Amount),0);
 
-    const month=
-    String(x.Date||"")
-    .slice(0,7);
 
-    if(!month)return;
+const salary=sal
+.filter(x=>String(x.Month)===y)
+.reduce((s,x)=>s+num(x.Amount),0);
 
 
-    if(!months[month]){
+const emiPaid=emi
+.filter(x=>String(x.Month)===y)
+.reduce((s,x)=>s+num(x.Amount),0);
 
-      months[month]={
-        income:0,
-        expense:0
-      };
 
-    }
+createChart(
+"mainChart",
+"bar",
+["Salary","Other Income","Expense","EMI"],
+[salary,income,expense,emiPaid],
+"Amount"
+);
 
 
-    if(
-      String(x.Type)
-      .toLowerCase()==="income"
-    ){
+createChart(
+"expenseChart",
+"doughnut",
+["Income","Expense"],
+[income,expense],
+"Amount"
+);
 
-      months[month].income+=
-      num(x.Amount);
 
-    }
+/* PASSBOOK */
 
-    else{
+createChart(
+"passbookChart",
+"bar",
+["Income","Expense"],
+[income,expense],
+"Amount"
+);
 
-      months[month].expense+=
-      num(x.Amount);
 
-    }
+/* SALARY TREND */
 
-  });
+const salaryMonths={};
 
+sal.forEach(x=>{
 
-  const monthLabels=
-  Object.keys(months).sort();
+salaryMonths[x.Month]=
+(salaryMonths[x.Month]||0)+num(x.Amount);
 
+});
 
-  destroyChart(
-    "incomeExpense"
-  );
 
+createChart(
+"salaryChart",
+"line",
+Object.keys(salaryMonths),
+Object.values(salaryMonths),
+"Salary"
+);
 
-  charts.incomeExpense=
-  new Chart(
-    $("incomeExpenseChart"),
-    {
-      type:"bar",
 
-      data:{
-        labels:monthLabels,
+/* LOANS */
 
-        datasets:[
-          {
-            label:"Income",
-            data:monthLabels.map(
-              m=>months[m].income
-            )
-          },
-          {
-            label:"Expense",
-            data:monthLabels.map(
-              m=>months[m].expense
-            )
-          }
-        ]
-      },
+const totalLoan=loans
+.reduce((s,x)=>s+num(x["Initial Amount"]),0);
 
-      options:{
-        responsive:true,
-        maintainAspectRatio:false
-      }
+const totalEmi=emi
+.reduce((s,x)=>s+num(x.Amount),0);
 
-    }
-  );
 
+createChart(
+"loanChart",
+"doughnut",
+["Initial Loan","EMI Recorded"],
+[totalLoan,totalEmi],
+"Amount"
+);
 
-  /* EXPENSE CATEGORY */
 
-  const categories={};
+/* GIVE TAKE */
 
+const balances=
+Object.values(getGiveTakeBalances());
 
-  p.filter(
-    x=>
-    String(x.Type)
-    .toLowerCase()==="expense"
-  )
-  .forEach(x=>{
 
-    const cat=
-    x.Category||"Other";
+createChart(
+"giveChart",
+"bar",
+balances.map(x=>x.person),
+balances.map(x=>Math.abs(x.balance)),
+"Outstanding"
+);
 
-    categories[cat]=
-    (categories[cat]||0)+
-    num(x.Amount);
 
-  });
+/* SPLITTER */
 
+const group=(DB.splitGroups||[])
+.find(x=>x.ID===$("spGroupSel").value);
 
-  destroyChart(
-    "expenseCategory"
-  );
 
+if(group){
 
-  charts.expenseCategory=
-  new Chart(
-    $("expenseCategoryChart"),
-    {
-      type:"doughnut",
+const calc=calculateSplitGroup(group);
 
-      data:{
-        labels:Object.keys(categories),
-
-        datasets:[
-          {
-            data:Object.values(categories)
-          }
-        ]
-      },
-
-      options:{
-        responsive:true,
-        maintainAspectRatio:false
-      }
-
-    }
-  );
-
-
-  /* SALARY */
-
-  const salaryMonths={};
-
-
-  sal.forEach(x=>{
-
-    if(!x.Month)return;
-
-    salaryMonths[x.Month]=
-    (salaryMonths[x.Month]||0)+
-    num(x.Amount);
-
-  });
-
-
-  const salaryLabels=
-  Object.keys(salaryMonths).sort();
-
-
-  destroyChart("salary");
-
-
-  charts.salary=
-  new Chart(
-    $("salaryChart"),
-    {
-      type:"line",
-
-      data:{
-        labels:salaryLabels,
-
-        datasets:[
-          {
-            label:"Salary",
-
-            data:
-            salaryLabels.map(
-              m=>salaryMonths[m]
-            )
-          }
-        ]
-      },
-
-      options:{
-        responsive:true,
-        maintainAspectRatio:false
-      }
-
-    }
-  );
-
-
-  /* EMI */
-
-  const emiMonths={};
-
-
-  em.forEach(x=>{
-
-    if(!x.Month)return;
-
-    emiMonths[x.Month]=
-    (emiMonths[x.Month]||0)+
-    num(x.Amount);
-
-  });
-
-
-  const emiLabels=
-  Object.keys(emiMonths).sort();
-
-
-  destroyChart("emi");
-
-
-  charts.emi=
-  new Chart(
-    $("emiChart"),
-    {
-      type:"bar",
-
-      data:{
-        labels:emiLabels,
-
-        datasets:[
-          {
-            label:"EMI Paid",
-
-            data:
-            emiLabels.map(
-              m=>emiMonths[m]
-            )
-          }
-        ]
-      },
-
-      options:{
-        responsive:true,
-        maintainAspectRatio:false
-      }
-
-    }
-  );
+createChart(
+"splitChart",
+"bar",
+calc.stats.map(x=>x.name),
+calc.stats.map(x=>x.paid),
+"Amount Paid"
+);
 
 }
 
 
-/* ================= START APP ================= */
+/* INVESTMENT */
+
+createChart(
+"investmentChart",
+"doughnut",
+assets.map(x=>x["Asset Name"]),
+assets.map(x=>num(x["Monthly Amount"])),
+"Monthly Amount"
+);
+
+}
+
+
+/* ================= START ================= */
 
 DB=restore();
 
 
 if(Object.keys(DB).length){
 
-  render();
+render();
 
-  setStatus("☁️ Loading latest...");
+setStatus("☁️ Loading latest...");
 
-  loadAll(true);
+loadAll(true);
 
-}
+}else{
 
-else{
-
-  loadAll(false);
+loadAll();
 
 }
