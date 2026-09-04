@@ -1,0 +1,65 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ankit Finance Hub</title><link rel="stylesheet" href="style.css"></head><body>
+<header><button id="menuBtn">☰</button><h1>💰 Ankit Finance Hub</h1><div class="right"><button id="themeBtn">🌙 Dark</button><span id="status">☁️ Connecting...</span></div></header>
+<aside id="sidebar"><button data-page="dashboard">🏠 Dashboard</button><button data-page="passbook">📒 Passbook</button><button data-page="salary">💰 Salary</button><button data-page="loans">🏦 Loans & EMI</button><button data-page="give">🤝 Give & Take</button><button data-page="splitter">🧮 Money Splitter</button><button data-page="investments">📈 Investments & SIP</button><button data-page="vehicles">🚗 Bike & Car Tracker</button></aside>
+<main>
+<section id="dashboard" class="page active"><h2>🏠 Financial Dashboard</h2><div id="dash" class="grid"></div><div class="chartgrid"><div class="box"><h3>Monthly Overview</h3><canvas id="mainChart"></canvas></div><div class="box"><h3>Income vs Expense</h3><canvas id="expenseChart"></canvas></div></div><button onclick="loadAll()">🔄 Refresh Cloud Data</button></section>
+<section id="passbook" class="page"><h2>📒 Passbook</h2><div class="form"><input id="pbDate" type="date"><select id="pbType"><option>Expense</option><option>Income</option></select><input id="pbCat" list="categoryList" placeholder="Category"><input id="pbAmt" type="number" placeholder="Amount"><input id="pbAccount" list="accountList" placeholder="Account / UPI / Cash"><input id="pbRemarks" list="remarksList" placeholder="Remarks"><button onclick="addPassbook()">Save</button></div><datalist id="categoryList"></datalist><datalist id="accountList"></datalist><datalist id="remarksList"></datalist><div id="passbookDash" class="grid"></div><div class="box"><canvas id="passbookChart"></canvas></div><div id="pbList"></div></section>
+<section id="salary" class="page"><h2>💰 Salary</h2><div class="form"><input id="salMonth" type="month"><input id="salCompany" list="companyList" placeholder="Company"><input id="salAmount" type="number" placeholder="Amount"><input id="salRemarks" list="salaryRemarksList" placeholder="Remarks"><button onclick="addSalary()">Save</button></div><datalist id="companyList"></datalist><datalist id="salaryRemarksList"></datalist><div id="salaryDash" class="grid"></div><div class="box"><canvas id="salaryChart"></canvas></div><div id="salaryList"></div></section>
+<section id="loans" class="page"><h2>🏦 Loans & EMI</h2><h3>Add Loan</h3><div class="form"><input id="loanName" placeholder="Loan name"><input id="loanInitial" type="number" placeholder="Initial amount"><input id="loanRemarks" placeholder="Remarks"><button onclick="addLoan()">Add Loan</button></div><h3>Mark EMI Paid</h3><div class="form"><select id="emiLoan"></select><input id="emiMonth" type="month"><input id="emiAmount" type="number" placeholder="EMI amount"><input id="emiRemarks" placeholder="Remarks"><button onclick="addEmi()">Mark EMI Paid</button></div><div id="loanDash" class="grid"></div><div class="box"><canvas id="loanChart"></canvas></div><div id="loanList"></div></section>
+<section id="give" class="page"><h2>🤝 Give & Take</h2><div class="form"><input id="gtPerson" list="personList" placeholder="Person"><select id="gtType"><option>Give</option><option>Receive</option><option>Take</option><option>Pay</option></select><input id="gtAmount" type="number" placeholder="Amount"><input id="gtDate" type="date"><input id="gtPurpose" placeholder="Purpose"><input id="gtNotes" placeholder="Notes"><button onclick="addGive()">Save</button></div><datalist id="personList"></datalist><div id="giveDash" class="grid"></div><div id="gtDashboard" class="grid"></div><div class="box"><canvas id="giveChart"></canvas></div><div id="gtList"></div></section>
+<section id="splitter" class="page"><h2>🧮 Money Splitter</h2><p class="muted">Splitwise-style: members, multiple people, equal/custom split, edit/delete and settlement history.</p><h3>Create Group</h3><div class="form"><input id="spGroup" placeholder="Group name"><select id="spCat"><option>Trip</option><option>Food</option><option>Party</option><option>Home</option><option>Other</option></select><input id="spMembers" placeholder="Ankit, Chirag, Rahul"><button onclick="addGroup()">Create Group</button></div><h3>Manage Group</h3><div class="form"><select id="spGroupSel"></select><input id="newMember" placeholder="Add member"><button onclick="addMember()">➕ Add Member</button><button class="secondary" onclick="renameGroup()">✏️ Rename</button></div><div id="memberChips" class="chips"></div><h3>Add / Edit Expense</h3><div class="form"><input id="splitEditId" type="hidden"><select id="spGroupExpense"></select><input id="spTitle" placeholder="Hotel / Dinner"><input id="spAmount" type="number" placeholder="Amount"><select id="spPaidBy"></select><input id="spDate" type="date"><select id="spSplitType"><option value="equal">Split equally</option><option value="custom">Custom amounts</option></select><input id="spMembersSel" placeholder="Participants blank = all"><button onclick="saveSplitExpense()">💾 Save Expense</button><button class="secondary" onclick="clearSplit()">Clear</button></div><div id="customShares" class="custom"></div><div id="splitSummary" class="grid"></div><div class="box"><canvas id="splitChart"></canvas></div><h3>💸 Who Pays Whom</h3><div id="settlementList"></div><h3>🧾 Expenses</h3><div id="splitExpenseList"></div><h3>💳 Settlement History</h3><div id="splitSettlementHistory"></div><h3>Groups</h3><div id="splitList"></div></section>
+<section id="investments" class="page"><h2>📈 Investment & SIP</h2><div class="form"><input id="sipPerson" placeholder="Person"><input id="sipBasket" placeholder="Basket Name"><button onclick="addBasket()">Create Basket</button></div><div class="form"><select id="assetBasket"></select><input id="assetName" placeholder="ETF / Mutual Fund"><select id="assetType"><option>ETF</option><option>Mutual Fund</option><option>Stock</option><option>Gold</option><option>Other</option></select><input id="assetAmount" type="number" placeholder="Monthly Amount"><button onclick="addAsset()">Add Asset</button></div><div id="investmentDash" class="grid"></div><div class="box"><canvas id="investmentChart"></canvas></div><div id="basketList"></div></section>
+
+<section id="vehicles" class="page">
+<h2>🚗 Bike & Car Maintenance & Petrol Tracker</h2>
+
+<h3>Add Vehicle</h3>
+<div class="form">
+<input id="vehicleName" list="vehicleNameList" placeholder="Dzire / Raider 125">
+<select id="vehicleType"><option>Car</option><option>Bike</option></select>
+<input id="vehiclePlate" placeholder="Number Plate (optional)">
+<button onclick="addVehicle()">Add Vehicle</button>
+</div>
+<datalist id="vehicleNameList"></datalist>
+
+<h3>⛽ Petrol / Fuel Entry</h3>
+<div class="form">
+<select id="fuelVehicle"></select>
+<input id="fuelDate" type="date">
+<input id="fuelOdo" type="number" placeholder="Current Odometer (km)">
+<input id="fuelQty" type="number" step="0.01" placeholder="Litres">
+<input id="fuelAmount" type="number" placeholder="Amount Paid">
+<select id="fuelType"><option>Petrol</option><option>Diesel</option><option>CNG</option><option>Electric</option></select>
+<input id="fuelNotes" placeholder="Notes">
+<button onclick="addFuel()">Save Fuel Entry</button>
+</div>
+
+<h3>🔧 Maintenance / Service Entry</h3>
+<div class="form">
+<select id="maintVehicle"></select>
+<input id="maintDate" type="date">
+<select id="maintCategory">
+<option>Service</option><option>Engine Oil</option><option>Tyres</option><option>Battery</option>
+<option>Repair</option><option>Accessories</option><option>Insurance</option><option>Other</option>
+</select>
+<input id="maintAmount" type="number" placeholder="Amount">
+<input id="maintOdo" type="number" placeholder="Odometer (optional)">
+<input id="maintRemarks" placeholder="Remarks">
+<button onclick="addMaintenance()">Save Maintenance</button>
+</div>
+
+<h3>📊 Vehicle Dashboard</h3>
+<div id="vehicleDash" class="grid"></div>
+
+<div class="chartgrid">
+<div class="box"><h3>Fuel Cost by Vehicle</h3><canvas id="fuelChart"></canvas></div>
+<div class="box"><h3>Maintenance Cost by Vehicle</h3><canvas id="maintenanceChart"></canvas></div>
+</div>
+
+<h3>⛽ Fuel History</h3>
+<div id="fuelList"></div>
+
+<h3>🔧 Maintenance History</h3>
+<div id="maintenanceList"></div>
+</section>
+</main><div id="toast"></div><script src="https://cdn.jsdelivr.net/npm/chart.js"></script><script src="app.js"></script></body></html>
