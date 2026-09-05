@@ -1,50 +1,139 @@
+
 /*
   IMPORTANT:
   Paste your deployed Google Apps Script Web App URL below.
-  Example: https://script.google.com/macros/s/XXXXX/exec
 */
-const API_URL ="https://script.google.com/macros/s/AKfycbwYIXL6HtbCW6QiSediymQGV_zySDfcd0f-f61zJ2ihqeIFJ4h1C_Ge6T_zlaVWw3-M/exec";
+
+const API_URL = "https://script.google.com/macros/s/AKfycbwYIXL6HtbCW6QiSediymQGV_zySDfcd0f-f61zJ2ihqeIFJ4h1C_Ge6T_zlaVWw3-M/exec";
 
 let DB = {}, charts = {};
 
 const $ = id => document.getElementById(id);
-const today = () => new Date().toISOString().slice(0,10);
-const monthNow = () => new Date().toISOString().slice(0,7);
+const today = () => new Date().toISOString().slice(0, 10);
+const monthNow = () => new Date().toISOString().slice(0, 7);
 const num = v => Number(v || 0);
-const fmt = v => "₹" + num(v).toLocaleString("en-IN",{maximumFractionDigits:2});
-const esc = v => String(v ?? "").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));
-const val = (id) => ($(id)?.value || "").trim();
+const fmt = v => "₹" + num(v).toLocaleString("en-IN", {
+  maximumFractionDigits: 2
+});
 
-function toast(msg, ms=2500){
-  const t=$("toast"); t.textContent=msg; t.classList.add("show");
-  clearTimeout(window._toast); window._toast=setTimeout(()=>t.classList.remove("show"),ms);
+const esc = v =>
+  String(v ?? "").replace(/[&<>"']/g, m => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;"
+  }[m]));
+
+const val = id => ($(id)?.value || "").trim();
+
+function toast(msg, ms = 2500) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+
+  clearTimeout(window._toast);
+
+  window._toast = setTimeout(() => {
+    t.classList.remove("show");
+  }, ms);
 }
-function setStatus(text){ $("status").textContent=text; }
-function apiReady(){ return API_URL && !API_URL.includes("PASTE_YOUR"); }
 
-async function api(action, payload={}){
-  if(!apiReady()) throw new Error("Paste your Google Apps Script Web App URL in app.js");
-  const r = await fetch(API_URL,{
-    method:"POST", mode:"cors",
-    headers:{"Content-Type":"text/plain;charset=utf-8"},
-    body:JSON.stringify({action,...payload})
+function setStatus(text) {
+  $("status").textContent = text;
+}
+
+function apiReady() {
+  return API_URL && !API_URL.includes("PASTE_YOUR");
+}
+
+async function api(action, payload = {}) {
+
+  if (!apiReady()) {
+    throw new Error("Paste your Google Apps Script Web App URL in app.js");
+  }
+
+  const r = await fetch(API_URL, {
+    method: "POST",
+    mode: "cors",
+    headers: {
+      "Content-Type": "text/plain;charset=utf-8"
+    },
+    body: JSON.stringify({
+      action,
+      ...payload
+    })
   });
-  const j=await r.json();
-  if(!j.success) throw new Error(j.error||"Cloud request failed");
+
+  const j = await r.json();
+
+  if (!j.success) {
+    throw new Error(j.error || "Cloud request failed");
+  }
+
   return j;
 }
-async function loadAll(){
-  if(!apiReady()){ setStatus("⚠️ API URL required"); toast("Paste Apps Script Web App URL in app.js"); renderAll(); return; }
-  try{
-    setStatus("☁️ Syncing...");
-    const r=await fetch(API_URL+"?action=loadAll",{cache:"no-store"});
-    const j=await r.json();
-    if(!j.success) throw new Error(j.error||"Load failed");
-    DB=j.data||{};
-    Object.keys(["transactions","salary","loans","emi","passbook","people","baskets","assets","splitGroups","splitExpenses","splitSettlements","vehicles","fuel","maintenance"]).forEach(k=>DB[k]=DB[k]||[]);
-    setStatus("☁️ Synced");
+
+async function loadAll() {
+
+  if (!apiReady()) {
+    setStatus("⚠️ API URL required");
+    toast("Paste Apps Script Web App URL in app.js");
     renderAll();
-  }catch(e){ console.error(e); setStatus("⚠️ Sync failed"); toast(e.message); renderAll(); }
+    return;
+  }
+
+  try {
+
+    setStatus("☁️ Syncing...");
+
+    const r = await fetch(
+      API_URL + "?action=loadAll",
+      {
+        cache: "no-store"
+      }
+    );
+
+    const j = await r.json();
+
+    if (!j.success) {
+      throw new Error(j.error || "Load failed");
+    }
+
+    DB = j.data || {};
+
+    [
+      "transactions",
+      "salary",
+      "loans",
+      "emi",
+      "passbook",
+      "people",
+      "baskets",
+      "assets",
+      "sipPayments",
+      "splitGroups",
+      "splitExpenses",
+      "splitSettlements",
+      "vehicles",
+      "fuel",
+      "maintenance"
+    ].forEach(k => DB[k] = DB[k] || []);
+
+    setStatus("☁️ Synced");
+
+    renderAll();
+
+  } catch (e) {
+
+    console.error(e);
+
+    setStatus("⚠️ Sync failed");
+
+    toast(e.message);
+
+    renderAll();
+  }
 }
 async function save(table,data){
   const r=await api("save",{table,data});
