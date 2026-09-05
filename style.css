@@ -13,3 +13,54 @@ main{margin-left:245px;padding:22px;max-width:1500px}.page{display:none}.page.ac
 
 
 .filterbar{display:flex;flex-wrap:wrap;gap:10px;align-items:end;background:var(--card);border:1px solid var(--line);padding:12px;border-radius:14px;margin-bottom:14px}.filterbar label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--muted);min-width:180px}.filterbar button{height:42px}@media(max-width:600px){.filterbar label{min-width:100%}}
+.vehicle-summary{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
+  gap:14px;
+  margin-bottom:20px;
+}
+
+.vehicle-summary-card{
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:16px;
+}
+
+.vehicle-summary-card h3{
+  margin:0 0 12px;
+  font-size:18px;
+}
+
+.vehicle-summary-row{
+  display:flex;
+  justify-content:space-between;
+  gap:15px;
+  padding:10px 0;
+  border-bottom:1px solid var(--line);
+}
+
+.vehicle-summary-row:last-child{
+  border-bottom:0;
+}
+
+.vehicle-summary-label{
+  color:var(--muted);
+}
+
+.vehicle-summary-value{
+  font-weight:bold;
+  text-align:right;
+}
+
+.vehicle-target{
+  color:#3b82f6;
+}
+
+.vehicle-remaining{
+  color:#16a34a;
+}
+
+.vehicle-overdue{
+  color:#dc2626;
+}
