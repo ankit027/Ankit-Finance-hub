@@ -3962,8 +3962,44 @@ function vehicleSummary() {
     const currentOdometer = latestFuel
       ? n(latestFuel.Odometer)
       : 0;
+$("maintenanceList").innerHTML =
+  maint
+    .slice()
+    .sort((a,b) =>
+      String(b.Date).localeCompare(String(a.Date))
+    )
+    .map(x => {
+
+      const v = vs.find(
+        z => z.ID === x["Vehicle ID"]
+      );
+
+      return item(
+        `<b>${v ? v["Vehicle Name"] : "Unknown Vehicle"}</b>
+        <br>
+        <small>
+        ${x.Date} • ${x.Category}
+        • ${x.Odometer || "-"} km
+        • ${x.Remarks || ""}
+        </small>`,
+        m(x.Amount),
+        `<button class="danger"
+        onclick="del('maintenance','${x.ID}')">
+        Delete
+        </button>`
+      );
+
+    })
+    .join("")
+  || "<p>No maintenance entries</p>";
 
 
+vehicleSummary();
+
+}
+$("vehicleSummaryFilter").onchange = () => {
+  vehicleSummary();
+};
     // Latest maintenance record
     const vehicleMaintenance = maintenance
       .filter(x => x["Vehicle ID"] === vehicleId)
