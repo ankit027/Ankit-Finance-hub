@@ -174,8 +174,17 @@ function renderDashboard(){
   const expense=pb.filter(x=>x.Type==="Expense").reduce((s,x)=>s+num(x.Amount),0);
   const salary=(DB.salary||[]).filter(x=>!m||String(x.Month)===m).reduce((s,x)=>s+num(x.Amount),0);
   const emi=(DB.emi||[]).filter(x=>!m||String(x.Month)===m).reduce((s,x)=>s+num(x.Amount),0);
-  const toReceive=(DB.transactions||[]).filter(x=>["Give","Receive"].includes(x.Type)).reduce((s,x)=>s+(x.Type==="Give"?num(x.Amount):-num(x.Amount)),0);
-  const toPay=(DB.transactions||[]).filter(x=>["Take","Pay"].includes(x.Type)).reduce((s,x)=>s+(x.Type==="Take"?num(x.Amount):-num(x.Amount)),0);
+  const toReceive = (DB.transactions || []).reduce((s, x) => {
+  if (x.Type === "Pending to Take") return s + num(x.Amount);
+  if (x.Type === "Received") return s - num(x.Amount);
+  return s;
+}, 0);
+
+const toPay = (DB.transactions || []).reduce((s, x) => {
+  if (x.Type === "Pending to Pay") return s + num(x.Amount);
+  if (x.Type === "Paid") return s - num(x.Amount);
+  return s;
+}, 0);
   $("dash").innerHTML=[
     card("💰 Salary",fmt(salary)),card("📈 Total Income",fmt(income)),card("💸 Expense",fmt(expense)),card("🏦 EMI Paid",fmt(emi)),
     card("📉 SIP Paid","₹0"),card("🤝 To Receive",fmt(Math.max(0,toReceive))),card("🤝 To Pay",fmt(Math.max(0,toPay))),card("💳 Net",fmt(income-expense-emi))
@@ -221,52 +230,104 @@ function renderLoans(){
 }
 async function addLoan(){if(!val("loanName")||!num(val("loanInitial")))return toast("Loan name and amount required");try{await save("loans",{"Loan Name":val("loanName"),"Initial Amount":num(val("loanInitial")),Remarks:val("loanRemarks")});["loanName","loanInitial","loanRemarks"].forEach(id=>$(id).value="");renderAll();toast("Loan added");}catch(e){toast(e.message)}}
 async function addEmi(){if(!val("emiLoan")||!val("emiMonth")||!num(val("emiAmount")))return toast("Select loan, month and amount");try{await save("emi",{"Loan ID":val("emiLoan"),Month:val("emiMonth"),Amount:num(val("emiAmount")),Remarks:val("emiRemarks")});$("emiAmount").value="";$("emiRemarks").value="";renderAll();toast("EMI saved");}catch(e){toast(e.message)}}
-
 function renderGive(){
-  const rows=DB.transactions||[];
-  const rec=rows.reduce((s,x)=>s+(x.Type==="Give"?num(x.Amount):x.Type==="Receive"?-num(x.Amount):0),0);
-  const pay=rows.reduce((s,x)=>s+(x.Type==="Take"?num(x.Amount):x.Type==="Pay"?-num(x.Amount):0),0);
-  $("giveDash").innerHTML=card("To Receive",fmt(Math.max(0,rec)))+card("To Pay",fmt(Math.max(0,pay)));
-  $("gtList").innerHTML=rows.sort((a,b)=>String(b.Date).localeCompare(String(a.Date))).map(x=>`<div class="item"><div><b>${esc(x.Person)} • ${esc(x.Type)}</b><br><small>${esc(x.Date)} • ${esc(x.Purpose||"")} ${x.Notes?"• "+esc(x.Notes):""}</small></div><div><b>${fmt(x.Amount)}</b><br><button class="danger" onclick="del('transactions','${x.ID}')">Delete</button></div></div>`).join("")||"<p class='muted'>No records</p>";
+  const rows = DB.transactions || [];
+
+  let toReceive = 0;
+  let toPay = 0;
+
+  rows.forEach(x => {
+    const amount = num(x.Amount);
+
+    if (x.Type === "Pending to Take") {
+      toReceive += amount;
+    }
+
+    if (x.Type === "Received") {
+      toReceive -= amount;
+    }
+
+    if (x.Type === "Pending to Pay") {
+      toPay += amount;
+    }
+
+    if (x.Type === "Paid") {
+      toPay -= amount;
+    }
+  });
+
+  $("giveDash").innerHTML =
+    card("📥 To Receive", fmt(Math.max(0, toReceive))) +
+    card("📤 To Pay", fmt(Math.max(0, toPay)));
+
   const persons = unique(rows.map(x => x.Person));
 
-const receiveData = persons.map(p => {
-  const balance = rows
-    .filter(x => x.Person === p)
-    .reduce((s, x) => {
-      if (x.Type === "Give") return s + num(x.Amount);
-      if (x.Type === "Receive") return s - num(x.Amount);
-      return s;
-    }, 0);
+  const receiveData = persons.map(person => {
+    let balance = 0;
 
-  return Math.max(0, balance);
-});
+    rows
+      .filter(x => x.Person === person)
+      .forEach(x => {
+        if (x.Type === "Pending to Take") balance += num(x.Amount);
+        if (x.Type === "Received") balance -= num(x.Amount);
+      });
 
-const payData = persons.map(p => {
-  const balance = rows
-    .filter(x => x.Person === p)
-    .reduce((s, x) => {
-      if (x.Type === "Take") return s + num(x.Amount);
-      if (x.Type === "Pay") return s - num(x.Amount);
-      return s;
-    }, 0);
+    return Math.max(0, balance);
+  });
 
-  return Math.max(0, balance);
-});
+  const payData = persons.map(person => {
+    let balance = 0;
 
-chart("giveChart", "bar", {
-  labels: persons,
-  datasets: [
-    {
-      label: "To Receive",
-      data: receiveData
-    },
-    {
-      label: "To Pay",
-      data: payData
-    }
-  ]
-});}
+    rows
+      .filter(x => x.Person === person)
+      .forEach(x => {
+        if (x.Type === "Pending to Pay") balance += num(x.Amount);
+        if (x.Type === "Paid") balance -= num(x.Amount);
+      });
+
+    return Math.max(0, balance);
+  });
+
+  $("gtList").innerHTML = rows
+    .slice()
+    .sort((a,b) => String(b.Date).localeCompare(String(a.Date)))
+    .slice(0, 10)
+    .map(x => `
+      <div class="item">
+        <div>
+          <b>${esc(x.Person)} • ${esc(x.Type)}</b>
+          <br>
+          <small>
+            ${esc(x.Date)} • ${esc(x.Purpose || "")}
+            ${x.Notes ? " • " + esc(x.Notes) : ""}
+          </small>
+        </div>
+
+        <div>
+          <b>${fmt(x.Amount)}</b>
+          <br>
+          <button class="danger"
+            onclick="del('transactions','${x.ID}')">
+            Delete
+          </button>
+        </div>
+      </div>
+    `).join("") || "<p class='muted'>No records</p>";
+
+  chart("giveChart", "bar", {
+    labels: persons,
+    datasets: [
+      {
+        label: "To Receive",
+        data: receiveData
+      },
+      {
+        label: "To Pay",
+        data: payData
+      }
+    ]
+  });
+}
 async function addGive(){if(!val("gtPerson")||!num(val("gtAmount")))return toast("Person and amount required");try{await save("transactions",{Person:val("gtPerson"),Type:val("gtType"),Amount:num(val("gtAmount")),Date:val("gtDate")||today(),Purpose:val("gtPurpose"),Notes:val("gtNotes")});["gtPerson","gtAmount","gtPurpose","gtNotes"].forEach(id=>$(id).value="");renderAll();toast("Saved");}catch(e){toast(e.message)}}
 
 function parseJSON(v, fallback=[]){try{return typeof v==="string"?JSON.parse(v):v||fallback}catch(e){return fallback}}
