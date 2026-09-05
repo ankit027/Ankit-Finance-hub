@@ -86,7 +86,12 @@
 
 <section id="give" class="page">
   <h2>🤝 Give & Take</h2>
-  <div class="form"><input id="gtPerson" list="personList" placeholder="Person"><select id="gtType"><option>Give</option><option>Receive</option><option>Take</option><option>Pay</option></select><input id="gtAmount" type="number" placeholder="Amount"><input id="gtDate" type="date"><input id="gtPurpose" placeholder="Purpose"><input id="gtNotes" placeholder="Notes"><button onclick="addGive()">Save</button></div>
+  <div class="form"><input id="gtPerson" list="personList" placeholder="Person"><select id="gtType">
+  <option value="Pending to Take">Pending to Take</option>
+  <option value="Received">Received</option>
+  <option value="Pending to Pay">Pending to Pay</option>
+  <option value="Paid">Paid</option>
+</select><input id="gtAmount" type="number" placeholder="Amount"><input id="gtDate" type="date"><input id="gtPurpose" placeholder="Purpose"><input id="gtNotes" placeholder="Notes"><button onclick="addGive()">Save</button></div>
   <datalist id="personList"></datalist>
   <div id="giveDash" class="grid"></div><div id="gtDashboard" class="grid"></div><div class="box"><canvas id="giveChart"></canvas></div><div id="gtList"></div>
 </section>
