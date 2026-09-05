@@ -15,7 +15,25 @@
 
 <section id="vehicles" class="page">
 <h2>🚗 Bike & Car Maintenance & Petrol Tracker</h2>
+<h3>📊 Vehicle Maintenance Summary</h3>
 
+<div class="filterbar">
+  <label>
+    Vehicle Type
+    <select id="vehicleSummaryFilter">
+      <option value="All">All Vehicles</option>
+      <option value="Bike">Bike</option>
+      <option value="Car">Car</option>
+    </select>
+  </label>
+</div>
+
+<p class="muted">
+  Next target is calculated from the latest maintenance actual KM.
+  Current KM comes from your latest petrol odometer reading.
+</p>
+
+<div id="vehicleSummary" class="vehicle-summary"></div>
 <h3>Add Vehicle</h3>
 <div class="form">
 <input id="vehicleName" list="vehicleNameList" placeholder="Dzire / Raider 125">
