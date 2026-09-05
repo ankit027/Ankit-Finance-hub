@@ -10,20 +10,53 @@ const ym=()=>new Date().toISOString().slice(0,7);
 const today=()=>new Date().toISOString().slice(0,10);
 
 window.addEventListener("unhandledrejection",e=>{console.error(e.reason);toast("⚠️ "+(e.reason?.message||"Something went wrong"))});
+async function api(action, payload = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
 
-async function api(action,payload={}){
-  const controller=new AbortController();
-  const timer=setTimeout(()=>controller.abort(),15000);
-  try{
-    const r=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action,...payload}),signal:controller.signal});
-    const t=await r.text(); let d;
-    try{d=JSON.parse(t)}catch(e){throw Error("Invalid server response. Check Apps Script deployment URL.")}
-    if(!d.success)throw Error(d.error||"Server error");
-    return d;
-  }catch(e){
-    if(e.name==="AbortError")throw Error("Sync timeout. Check Apps Script deployment and internet.");
-    throw e;
-  }finally{clearTimeout(timer)}
+  try {
+    const response = await fetch(API_URL, {
+      method: "POST",
+      body: JSON.stringify({
+        action: action,
+        ...payload
+      }),
+      signal: controller.signal,
+      redirect: "follow"
+    });
+
+    const text = await response.text();
+
+    if (!text) {
+      throw new Error("Empty response from Google Apps Script");
+    }
+
+    let data;
+
+    try {
+      data = JSON.parse(text);
+    } catch (err) {
+      console.error("Server response:", text);
+      throw new Error("Invalid server response");
+    }
+
+    if (!data.success) {
+      throw new Error(data.error || "Server error");
+    }
+
+    return data;
+
+  } catch (err) {
+
+    if (err.name === "AbortError") {
+      throw new Error("Sync timeout. Please check internet.");
+    }
+
+    throw err;
+
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 function toast(x){$("toast").textContent=x;$("toast").classList.add("show");setTimeout(()=>$("toast").classList.remove("show"),2200)}
 function status(x){$("status").textContent=x}
