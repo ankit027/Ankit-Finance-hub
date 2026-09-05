@@ -3931,3 +3931,218 @@ if (
 
 
 loadAll();
+function vehicleSummary() {
+
+  const filter = $("vehicleSummaryFilter")?.value || "All";
+
+  let vehiclesList = DB.vehicles || [];
+
+  if (filter !== "All") {
+    vehiclesList = vehiclesList.filter(
+      v => v["Vehicle Type"] === filter
+    );
+  }
+
+  const fuel = DB.fuel || [];
+  const maintenance = DB.maintenance || [];
+
+  const html = vehiclesList.map(vehicle => {
+
+    const vehicleId = vehicle.ID;
+
+    // Latest petrol/fuel odometer
+    const vehicleFuel = fuel
+      .filter(x => x["Vehicle ID"] === vehicleId)
+      .sort((a, b) =>
+        String(b.Date || "").localeCompare(String(a.Date || ""))
+      );
+
+    const latestFuel = vehicleFuel[0];
+
+    const currentOdometer = latestFuel
+      ? n(latestFuel.Odometer)
+      : 0;
+
+
+    // Latest maintenance record
+    const vehicleMaintenance = maintenance
+      .filter(x => x["Vehicle ID"] === vehicleId)
+      .sort((a, b) => {
+
+        const dateCompare =
+          String(b.Date || "").localeCompare(String(a.Date || ""));
+
+        if (dateCompare !== 0) return dateCompare;
+
+        return n(b.Odometer) - n(a.Odometer);
+      });
+
+    const latestMaintenance = vehicleMaintenance[0];
+
+    if (!latestMaintenance) {
+
+      return `
+        <div class="vehicle-summary-card">
+          <h3>
+            ${vehicle["Vehicle Type"] === "Bike" ? "🏍️" : "🚗"}
+            ${vehicle["Vehicle Name"]}
+          </h3>
+
+          <div class="vehicle-summary-row">
+            <span class="vehicle-summary-label">
+              Current Odometer
+            </span>
+
+            <span class="vehicle-summary-value">
+              ${currentOdometer.toLocaleString("en-IN")} km
+            </span>
+          </div>
+
+          <p class="muted">
+            No maintenance history available.
+          </p>
+        </div>
+      `;
+    }
+
+
+    const lastActualKM = n(latestMaintenance.Odometer);
+
+    const category =
+      latestMaintenance.Category || "Maintenance";
+
+
+    /*
+      Maintenance intervals
+
+      You can change these values later.
+    */
+
+    let interval = 3000;
+
+    if (
+      category === "Engine Oil" ||
+      category === "Oil Change"
+    ) {
+      interval = 3000;
+    }
+
+    if (category === "Service") {
+      interval = 5000;
+    }
+
+    if (category === "Coolant") {
+      interval = 10000;
+    }
+
+
+    const nextTarget = lastActualKM + interval;
+
+    const remaining = nextTarget - currentOdometer;
+
+    let remainingClass = "vehicle-remaining";
+    let remainingText =
+      Math.max(0, remaining).toLocaleString("en-IN") + " km";
+
+    if (remaining < 0) {
+
+      remainingClass = "vehicle-overdue";
+
+      remainingText =
+        "Overdue by " +
+        Math.abs(remaining).toLocaleString("en-IN") +
+        " km";
+    }
+
+
+    const date = latestMaintenance.Date
+      ? String(latestMaintenance.Date).slice(0, 10)
+      : "-";
+
+
+    return `
+      <div class="vehicle-summary-card">
+
+        <h3>
+          ${vehicle["Vehicle Type"] === "Bike" ? "🏍️" : "🚗"}
+          ${vehicle["Vehicle Name"]}
+        </h3>
+
+
+        <div class="vehicle-summary-row">
+
+          <span class="vehicle-summary-label">
+            Current Odometer
+          </span>
+
+          <span class="vehicle-summary-value">
+            ${currentOdometer.toLocaleString("en-IN")} km
+          </span>
+
+        </div>
+
+
+        <div class="vehicle-summary-row">
+
+          <span class="vehicle-summary-label">
+            Last Maintenance
+          </span>
+
+          <span class="vehicle-summary-value">
+            ${date} • ${category}
+          </span>
+
+        </div>
+
+
+        <div class="vehicle-summary-row">
+
+          <span class="vehicle-summary-label">
+            Last Actual KM
+          </span>
+
+          <span class="vehicle-summary-value">
+            ${lastActualKM.toLocaleString("en-IN")} km
+          </span>
+
+        </div>
+
+
+        <div class="vehicle-summary-row">
+
+          <span class="vehicle-summary-label">
+            Next ${category} Target
+          </span>
+
+          <span class="vehicle-summary-value vehicle-target">
+            ${nextTarget.toLocaleString("en-IN")} km
+          </span>
+
+        </div>
+
+
+        <div class="vehicle-summary-row">
+
+          <span class="vehicle-summary-label">
+            KM Remaining
+          </span>
+
+          <span class="vehicle-summary-value ${remainingClass}">
+            ${remainingText}
+          </span>
+
+        </div>
+
+      </div>
+    `;
+
+  }).join("");
+
+
+  $("vehicleSummary").innerHTML =
+    html || `
+      <p class="muted">
+        No ${filter === "All" ? "vehicle" : filter.toLowerCase()} found.
+      </p>
+    `;
+}
