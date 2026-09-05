@@ -1,72 +1,25 @@
-/* =========================================================
-   ANKIT FINANCE HUB - COMPLETE APP.JS
-   ========================================================= */
+// =========================================================
+// ANKIT FINANCE HUB - FIXED CLOUD APP
+// Google Sheets + Apps Script version
+// =========================================================
 
-const DB_KEY = "ankit_finance_hub_v2";
+const API_URL = "https://script.google.com/macros/s/AKfycbwYIXL6HtbCW6QiSediymQGV_zySDfcd0f-f61zJ2ihqeIFJ4h1C_Ge6T_zlaVWw3-M/exec";
+const LOCAL_KEY = "ankit_finance_hub_cloud_v4";
 
-let db = {
-  passbook: [],
-  salary: [],
-  loans: [],
-  emis: [],
-  giveTake: [],
-  splitGroups: [],
-  splitExpenses: [],
-  splitSettlements: [],
-  baskets: [],
-  assets: [],
-  vehicles: [],
-  fuel: [],
-  maintenance: []
-};
-
+let DB = {};
 let charts = {};
+let syncInProgress = false;
 
 const $ = id => document.getElementById(id);
-const uid = () => Date.now().toString(36) + Math.random().toString(36).substring(2, 8);
-const num = v => Number(v || 0);
+const uid = () => Date.now() + "-" + Math.random().toString(36).slice(2);
+const num = v => Number(v || 0) || 0;
+const money = v => "₹" + num(v).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+const ym = () => new Date().toISOString().slice(0, 7);
 const today = () => new Date().toISOString().slice(0, 10);
-const currentMonth = () => new Date().toISOString().slice(0, 7);
 
-function money(v) {
-  return "₹" + Number(v || 0).toLocaleString("en-IN", {
-    maximumFractionDigits: 2
-  });
+function arr(key) {
+  return Array.isArray(DB[key]) ? DB[key] : [];
 }
-
-/* =========================================================
-   STORAGE
-========================================================= */
-
-function loadDB() {
-  try {
-    const data = JSON.parse(localStorage.getItem(DB_KEY));
-    if (data) db = { ...db, ...data };
-  } catch (e) {
-    console.log(e);
-  }
-}
-
-function saveDB() {
-  localStorage.setItem(DB_KEY, JSON.stringify(db));
-}
-
-function saveAll() {
-  saveDB();
-  populateAllLists();
-  renderAll();
-}
-
-function loadAll() {
-  loadDB();
-  populateAllLists();
-  renderAll();
-  toast("Cloud / Local data refreshed");
-}
-
-/* =========================================================
-   TOAST
-========================================================= */
 
 function toast(message) {
   const el = $("toast");
@@ -75,18 +28,236 @@ function toast(message) {
   el.textContent = message;
   el.classList.add("show");
 
-  clearTimeout(window.toastTimer);
+  clearTimeout(window.__toastTimer);
 
-  window.toastTimer = setTimeout(() => {
+  window.__toastTimer = setTimeout(() => {
     el.classList.remove("show");
   }, 2500);
 }
 
-/* =========================================================
-   CHART
-========================================================= */
+function setStatus(message) {
+  const el = $("status");
+  if (el) el.textContent = message;
+}
 
-function makeChart(id, type, labels, datasets) {
+function persist() {
+  try {
+    localStorage.setItem(LOCAL_KEY, JSON.stringify(DB));
+  } catch (e) {}
+}
+
+function restore() {
+  try {
+    return JSON.parse(localStorage.getItem(LOCAL_KEY) || "{}");
+  } catch (e) {
+    return {};
+  }
+}
+
+// =========================================================
+// API
+// =========================================================
+
+async function api(action, payload = {}) {
+
+  const response = await fetch(API_URL, {
+    method: "POST",
+
+    headers: {
+      "Content-Type": "text/plain;charset=utf-8"
+    },
+
+    body: JSON.stringify({
+      action,
+      ...payload
+    })
+  });
+
+  const text = await response.text();
+
+  let json;
+
+  try {
+    json = JSON.parse(text);
+  } catch (e) {
+    throw new Error(
+      "Invalid API response. Check Apps Script deployment URL and access."
+    );
+  }
+
+  if (!json.success) {
+    throw new Error(json.error || "API error");
+  }
+
+  return json;
+}
+
+// =========================================================
+// LOAD ALL
+// =========================================================
+
+async function loadAll(silent = false) {
+
+  if (syncInProgress) return;
+
+  syncInProgress = true;
+
+  try {
+
+    if (!silent) {
+      setStatus("☁️ Syncing...");
+    }
+
+    const response = await api("loadAll");
+
+    DB = response.data || {};
+
+    persist();
+
+    render();
+
+    setStatus("☁️ Synced");
+
+  } catch (e) {
+
+    setStatus(
+      Object.keys(DB).length
+        ? "💾 Offline Cache"
+        : "⚠️ Sync Error"
+    );
+
+    if (!silent) {
+      toast(e.message);
+    }
+
+  } finally {
+
+    syncInProgress = false;
+
+  }
+}
+
+// =========================================================
+// SAVE
+// =========================================================
+
+async function save(table, data) {
+
+  setStatus("☁️ Saving...");
+
+  try {
+
+    const response = await api("save", {
+      table,
+      data
+    });
+
+    // Apps Script returns:
+    // { success:true, data:{ record: record } }
+
+    const record =
+      response?.data?.record ||
+      response?.record ||
+      data;
+
+    DB[table] = arr(table).slice();
+
+    const index = DB[table].findIndex(
+      x => String(x.ID) === String(record.ID)
+    );
+
+    if (index >= 0) {
+      DB[table][index] = record;
+    } else {
+      DB[table].push(record);
+    }
+
+    persist();
+
+    render();
+
+    setStatus("☁️ Synced");
+
+    toast("✓ Saved successfully");
+
+    return record;
+
+  } catch (e) {
+
+    setStatus("⚠️ Save Failed");
+
+    toast(e.message);
+
+    throw e;
+  }
+}
+
+// =========================================================
+// DELETE
+// =========================================================
+
+async function del(table, id) {
+
+  if (!confirm("Delete this record?")) return;
+
+  try {
+
+    await api("delete", {
+      table,
+      id
+    });
+
+    DB[table] = arr(table).filter(
+      x => String(x.ID) !== String(id)
+    );
+
+    persist();
+
+    render();
+
+    toast("Deleted successfully");
+
+  } catch (e) {
+
+    toast(e.message);
+
+  }
+}
+
+// =========================================================
+// UI HELPERS
+// =========================================================
+
+function card(title, value) {
+
+  return `
+    <div>
+      <small>${title}</small>
+      <b>${value}</b>
+    </div>
+  `;
+}
+
+function item(left, right, action = "") {
+
+  return `
+    <div class="item">
+
+      <span>
+        ${left}
+      </span>
+
+      <span>
+        ${right}
+        ${action}
+      </span>
+
+    </div>
+  `;
+}
+
+function chart(id, type, labels, data, label) {
+
   const canvas = $(id);
 
   if (!canvas || typeof Chart === "undefined") return;
@@ -96,82 +267,47 @@ function makeChart(id, type, labels, datasets) {
   }
 
   charts[id] = new Chart(canvas, {
+
     type,
+
     data: {
+
       labels,
-      datasets
+
+      datasets: [
+        {
+          label,
+          data
+        }
+      ]
+
     },
+
     options: {
       responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          display: true
-        }
-      },
-      scales:
-        type === "doughnut" || type === "pie"
-          ? {}
-          : {
-              y: {
-                beginAtZero: true
-              }
-            }
+      maintainAspectRatio: false
     }
+
   });
 }
 
-function card(title, amount) {
-  return `
-    <div>
-      <small>${title}</small>
-      <b>${money(amount)}</b>
-    </div>
-  `;
-}
+// =========================================================
+// NAVIGATION + THEME
+// =========================================================
 
-/* =========================================================
-   DELETE
-========================================================= */
+function initUI() {
 
-function removeItem(collection, id) {
-  db[collection] = db[collection].filter(x => x.id !== id);
-
-  saveAll();
-
-  toast("Deleted successfully");
-}
-
-/* =========================================================
-   NAVIGATION
-========================================================= */
-
-document.addEventListener("DOMContentLoaded", () => {
-
-  loadDB();
-
-  initDefaults();
-  initNavigation();
-  initListeners();
-
-  populateAllLists();
-  renderAll();
-
-  if ($("status")) {
-    $("status").textContent = "💾 Local Data";
-  }
-
-});
-
-function initNavigation() {
-
-  document.querySelectorAll("#sidebar button[data-page]")
+  document
+    .querySelectorAll("[data-page]")
     .forEach(button => {
 
-      button.addEventListener("click", () => {
+      button.onclick = () => {
 
-        document.querySelectorAll(".page")
-          .forEach(page => page.classList.remove("active"));
+        document
+          .querySelectorAll(".page")
+          .forEach(page => {
+            page.classList.remove("active");
+          });
 
         const page = $(button.dataset.page);
 
@@ -179,48 +315,148 @@ function initNavigation() {
           page.classList.add("active");
         }
 
-        $("sidebar").classList.remove("open");
+        $("sidebar")?.classList.remove("open");
 
-      });
+      };
 
     });
 
   $("menuBtn")?.addEventListener("click", () => {
-    $("sidebar").classList.toggle("open");
+
+    $("sidebar")?.classList.toggle("open");
+
   });
+
+  if (
+    localStorage.getItem("financeTheme") === "dark"
+  ) {
+    document.body.classList.add("dark");
+  }
+
+  updateThemeButton();
 
   $("themeBtn")?.addEventListener("click", () => {
 
     document.body.classList.toggle("dark");
 
-    const dark = document.body.classList.contains("dark");
+    localStorage.setItem(
+      "financeTheme",
+      document.body.classList.contains("dark")
+        ? "dark"
+        : "light"
+    );
 
-    localStorage.setItem("financeTheme", dark ? "dark" : "light");
-
-    $("themeBtn").textContent =
-      dark ? "☀️ Light" : "🌙 Dark";
+    updateThemeButton();
 
   });
 
-  if (localStorage.getItem("financeTheme") === "dark") {
+  [
+    "dashMonth",
+    "dashCategory",
+    "pbFilterMonth",
+    "pbFilterCategory"
+  ].forEach(id => {
 
-    document.body.classList.add("dark");
+    $(id)?.addEventListener("change", render);
 
-    if ($("themeBtn")) {
-      $("themeBtn").textContent = "☀️ Light";
+  });
+
+  $("vehicleTypeFilter")?.addEventListener(
+    "change",
+    () => {
+
+      populateVehicleFilters();
+
+      render();
+
     }
+  );
 
-  }
+  $("vehicleFilter")?.addEventListener(
+    "change",
+    render
+  );
+
+  $("spGroupSel")?.addEventListener(
+    "change",
+    () => {
+
+      if ($("spGroupExpense")) {
+        $("spGroupExpense").value =
+          $("spGroupSel").value;
+      }
+
+      renderSplit();
+
+    }
+  );
+
+  $("spGroupExpense")?.addEventListener(
+    "change",
+    () => {
+
+      if ($("spGroupSel")) {
+        $("spGroupSel").value =
+          $("spGroupExpense").value;
+      }
+
+      renderSplit();
+
+    }
+  );
+
+  $("spSplitType")?.addEventListener(
+    "change",
+    renderCustomShares
+  );
 
 }
 
+function updateThemeButton() {
+
+  const btn = $("themeBtn");
+
+  if (!btn) return;
+
+  btn.textContent =
+    document.body.classList.contains("dark")
+      ? "☀️ Light"
+      : "🌙 Dark";
+}
+
+// =========================================================
+// DEFAULT VALUES
+// =========================================================
+
 function initDefaults() {
 
-  if ($("dashMonth")) $("dashMonth").value = currentMonth();
+  if (
+    $("dashMonth") &&
+    !$("dashMonth").value
+  ) {
+    $("dashMonth").value = ym();
+  }
 
-  if ($("salMonth")) $("salMonth").value = currentMonth();
+  if (
+    $("pbFilterMonth") &&
+    !$("pbFilterMonth").value
+  ) {
+    $("pbFilterMonth").value = ym();
+  }
 
-  if ($("emiMonth")) $("emiMonth").value = currentMonth();
+  if (
+    $("salMonth") &&
+    !$("salMonth").value
+  ) {
+    $("salMonth").value = ym();
+  }
+
+  if (
+    $("emiMonth") &&
+    !$("emiMonth").value
+  ) {
+    $("emiMonth").value = ym();
+  }
 
   [
     "pbDate",
@@ -230,146 +466,534 @@ function initDefaults() {
     "maintDate"
   ].forEach(id => {
 
-    if ($(id)) $(id).value = today();
+    if (
+      $(id) &&
+      !$(id).value
+    ) {
+      $(id).value = today();
+    }
 
   });
 
 }
 
-function initListeners() {
+// =========================================================
+// LISTS / FILTERS
+// =========================================================
 
-  $("dashMonth")?.addEventListener("change", renderDashboard);
-  $("dashCategory")?.addEventListener("change", renderDashboard);
+function fillDatalist(id, values) {
 
-  $("pbFilterMonth")?.addEventListener("change", renderPassbook);
-  $("pbFilterCategory")?.addEventListener("change", renderPassbook);
+  const el = $(id);
 
-  $("vehicleTypeFilter")?.addEventListener("change", () => {
+  if (!el) return;
 
-    populateVehicleFilters();
-    renderVehicles();
+  el.innerHTML = [
+    ...new Set(
+      values.filter(Boolean)
+    )
+  ]
+    .map(x =>
+      `<option value="${String(x).replace(/"/g, "&quot;")}"></option>`
+    )
+    .join("");
+
+}
+
+function populateLists() {
+
+  const passbook = arr("passbook");
+
+  const salary = arr("salary");
+
+  const transactions = arr("transactions");
+
+  const categories = [
+    ...new Set(
+      passbook
+        .map(x => x.Category)
+        .filter(Boolean)
+    )
+  ].sort();
+
+  fillDatalist(
+    "categoryList",
+    passbook.map(x => x.Category)
+  );
+
+  fillDatalist(
+    "accountList",
+    passbook.map(x => x.Account)
+  );
+
+  fillDatalist(
+    "remarksList",
+    passbook.map(x => x.Remarks)
+  );
+
+  fillDatalist(
+    "companyList",
+    salary.map(x => x.Company)
+  );
+
+  fillDatalist(
+    "salaryRemarksList",
+    salary.map(x => x.Remarks)
+  );
+
+  fillDatalist(
+    "personList",
+    transactions.map(x => x.Person)
+  );
+
+  fillDatalist(
+    "vehicleNameList",
+    arr("vehicles").map(
+      x => x["Vehicle Name"]
+    )
+  );
+
+  [
+    "dashCategory",
+    "pbFilterCategory"
+  ].forEach(id => {
+
+    const el = $(id);
+
+    if (!el) return;
+
+    const previous = el.value;
+
+    el.innerHTML =
+      '<option value="">All Categories</option>' +
+      categories
+        .map(
+          x =>
+            `<option value="${x}">${x}</option>`
+        )
+        .join("");
+
+    if (
+      categories.includes(previous)
+    ) {
+      el.value = previous;
+    }
 
   });
 
-  $("vehicleFilter")?.addEventListener("change", renderVehicles);
+  const loans = arr("loans");
 
-  $("spGroupSel")?.addEventListener("change", () => {
+  if ($("emiLoan")) {
 
-    const id = $("spGroupSel").value;
+    const previous = $("emiLoan").value;
 
-    $("spGroupExpense").value = id;
+    $("emiLoan").innerHTML =
+      '<option value="">Select Loan</option>' +
+      loans
+        .map(
+          x =>
+            `<option value="${x.ID}">${x["Loan Name"]}</option>`
+        )
+        .join("");
 
-    updateSplitGroup();
+    if (
+      loans.some(
+        x => x.ID === previous
+      )
+    ) {
+      $("emiLoan").value = previous;
+    }
+
+  }
+
+  const baskets = arr("baskets");
+
+  const people = arr("people");
+
+  if ($("assetBasket")) {
+
+    const previous =
+      $("assetBasket").value;
+
+    $("assetBasket").innerHTML =
+      '<option value="">Select Basket</option>' +
+      baskets
+        .map(b => {
+
+          const p = people.find(
+            x => x.ID === b["Person ID"]
+          );
+
+          return `
+            <option value="${b.ID}">
+              ${p?.Name || ""} — ${b["Basket Name"]}
+            </option>
+          `;
+
+        })
+        .join("");
+
+    if (
+      baskets.some(
+        x => x.ID === previous
+      )
+    ) {
+      $("assetBasket").value = previous;
+    }
+
+  }
+
+  populateVehicleSelects();
+
+  populateSplitGroups();
+
+}
+
+function populateVehicleSelects() {
+
+  const vehicles = arr("vehicles");
+
+  [
+    "fuelVehicle",
+    "maintVehicle"
+  ].forEach(id => {
+
+    const el = $(id);
+
+    if (!el) return;
+
+    const previous = el.value;
+
+    el.innerHTML =
+      '<option value="">Select Vehicle</option>' +
+      vehicles
+        .map(
+          v =>
+            `<option value="${v.ID}">
+              ${v["Vehicle Name"]} • ${v["Vehicle Type"]}
+            </option>`
+        )
+        .join("");
+
+    if (
+      vehicles.some(
+        v => v.ID === previous
+      )
+    ) {
+      el.value = previous;
+    }
 
   });
 
-  $("spGroupExpense")?.addEventListener("change", () => {
+}
 
-    const id = $("spGroupExpense").value;
+function populateVehicleFilters() {
 
-    $("spGroupSel").value = id;
+  const type =
+    $("vehicleTypeFilter")?.value || "";
 
-    updateSplitGroup();
+  const filter =
+    $("vehicleFilter");
+
+  if (!filter) return;
+
+  const previous = filter.value;
+
+  const vehicles =
+    arr("vehicles").filter(
+      v =>
+        !type ||
+        v["Vehicle Type"] === type
+    );
+
+  filter.innerHTML =
+    '<option value="">All Vehicles</option>' +
+    vehicles
+      .map(
+        v =>
+          `<option value="${v.ID}">
+            ${v["Vehicle Name"]}
+          </option>`
+      )
+      .join("");
+
+  if (
+    vehicles.some(
+      v => v.ID === previous
+    )
+  ) {
+    filter.value = previous;
+  }
+
+}
+
+function populateSplitGroups() {
+
+  const groups =
+    arr("splitGroups");
+
+  [
+    "spGroupSel",
+    "spGroupExpense"
+  ].forEach(id => {
+
+    const el = $(id);
+
+    if (!el) return;
+
+    const previous = el.value;
+
+    el.innerHTML =
+      '<option value="">Select Group</option>' +
+      groups
+        .map(
+          g =>
+            `<option value="${g.ID}">
+              ${g["Group Name"]}
+            </option>`
+        )
+        .join("");
+
+    if (
+      groups.some(
+        g => g.ID === previous
+      )
+    ) {
+      el.value = previous;
+    }
 
   });
 
-  $("spSplitType")?.addEventListener(
-    "change",
-    renderCustomShares
+}
+
+// =========================================================
+// DASHBOARD
+// =========================================================
+
+function filterPassbook(
+  rows,
+  month,
+  category
+) {
+
+  return rows.filter(
+    x =>
+      (
+        !month ||
+        String(x.Date || "")
+          .slice(0, 7) === month
+      ) &&
+      (
+        !category ||
+        String(x.Category || "") === category
+      )
   );
 
 }
 
-/* =========================================================
-   DASHBOARD
-========================================================= */
+function giveBalances() {
 
-function getDashboardRows() {
+  const out = {};
 
-  const month = $("dashMonth").value;
-  const category = $("dashCategory").value;
+  arr("transactions").forEach(x => {
 
-  return db.passbook.filter(x => {
+    const person =
+      String(
+        x.Person || "Unknown"
+      ).trim();
 
-    const monthMatch =
-      !month ||
-      String(x.date || "").startsWith(month);
+    if (!out[person]) {
 
-    const categoryMatch =
-      !category ||
-      x.category === category;
+      out[person] = {
+        person,
+        balance: 0,
+        given: 0,
+        received: 0,
+        taken: 0,
+        paid: 0
+      };
 
-    return monthMatch && categoryMatch;
+    }
+
+    const a = num(x.Amount);
+
+    const type =
+      String(
+        x.Type || ""
+      ).toLowerCase();
+
+    const p = out[person];
+
+    if (type === "give") {
+
+      p.balance += a;
+      p.given += a;
+
+    } else if (type === "receive") {
+
+      p.balance -= a;
+      p.received += a;
+
+    } else if (type === "take") {
+
+      p.balance -= a;
+      p.taken += a;
+
+    } else if (type === "pay") {
+
+      p.balance += a;
+      p.paid += a;
+
+    }
 
   });
+
+  return out;
 
 }
 
 function renderDashboard() {
 
-  const rows = getDashboardRows();
+  const month =
+    $("dashMonth")?.value || ym();
 
-  const month = $("dashMonth").value;
+  const category =
+    $("dashCategory")?.value || "";
 
-  const income = rows
-    .filter(x => x.type === "Income")
-    .reduce((s, x) => s + num(x.amount), 0);
+  const p = filterPassbook(
+    arr("passbook"),
+    month,
+    category
+  );
 
-  const expense = rows
-    .filter(x => x.type === "Expense")
-    .reduce((s, x) => s + num(x.amount), 0);
-
-  const salary = db.salary
-    .filter(x => x.month === month)
-    .reduce((s, x) => s + num(x.amount), 0);
-
-  const emi = db.emis
-    .filter(x => x.month === month)
-    .reduce((s, x) => s + num(x.amount), 0);
-
-  const sip = db.assets
-    .reduce((s, x) => s + num(x.amount), 0);
-
-  const toReceive = db.giveTake
-    .filter(x =>
-      x.type === "Receive" ||
-      x.type === "Take"
+  const income = p
+    .filter(
+      x =>
+        String(x.Type)
+          .toLowerCase() === "income"
     )
-    .reduce((s, x) => s + num(x.amount), 0);
-
-  const toPay = db.giveTake
-    .filter(x =>
-      x.type === "Give" ||
-      x.type === "Pay"
-    )
-    .reduce((s, x) => s + num(x.amount), 0);
-
-  $("dash").innerHTML =
-
-    card("💰 Salary", salary) +
-
-    card("📈 Total Income", income + salary) +
-
-    card("💸 Expense", expense) +
-
-    card("🏦 EMI Paid", emi) +
-
-    card("📉 SIP Paid", sip) +
-
-    card("🤝 To Receive", toReceive) +
-
-    card("🤝 To Pay", toPay) +
-
-    card(
-      "💳 Net",
-      income + salary - expense - emi - sip
+    .reduce(
+      (s, x) =>
+        s + num(x.Amount),
+      0
     );
+
+  const expense = p
+    .filter(
+      x =>
+        String(x.Type)
+          .toLowerCase() === "expense"
+    )
+    .reduce(
+      (s, x) =>
+        s + num(x.Amount),
+      0
+    );
+
+  const salary =
+    arr("salary")
+      .filter(
+        x =>
+          String(x.Month) === month
+      )
+      .reduce(
+        (s, x) =>
+          s + num(x.Amount),
+        0
+      );
+
+  const emi =
+    arr("emi")
+      .filter(
+        x =>
+          String(x.Month) === month
+      )
+      .reduce(
+        (s, x) =>
+          s + num(x.Amount),
+        0
+      );
+
+  const sip =
+    arr("sipPayments")
+      .filter(
+        x =>
+          String(x.Month) === month
+      )
+      .reduce(
+        (s, x) =>
+          s + num(x.Amount),
+        0
+      );
+
+  const balances =
+    Object.values(
+      giveBalances()
+    );
+
+  const receive =
+    balances
+      .filter(
+        x => x.balance > 0
+      )
+      .reduce(
+        (s, x) =>
+          s + x.balance,
+        0
+      );
+
+  const pay =
+    balances
+      .filter(
+        x => x.balance < 0
+      )
+      .reduce(
+        (s, x) =>
+          s + Math.abs(x.balance),
+        0
+      );
+
+  $("dash").innerHTML = [
+
+    ["💰 Salary", salary],
+
+    ["📈 Total Income", salary + income],
+
+    ["💸 Expense", expense],
+
+    ["🏦 EMI Paid", emi],
+
+    ["📉 SIP Paid", sip],
+
+    ["🤝 To Receive", receive],
+
+    ["🤝 To Pay", pay],
+
+    [
+      "💳 Net",
+      salary +
+      income -
+      expense -
+      emi -
+      sip
+    ]
+
+  ]
+    .map(
+      x => card(
+        x[0],
+        money(x[1])
+      )
+    )
+    .join("");
 
   const monthly = {};
 
-  db.passbook.forEach(x => {
+  arr("passbook").forEach(x => {
 
-    const m = String(x.date || "").slice(0, 7);
+    const m =
+      String(
+        x.Date || ""
+      ).slice(0, 7);
 
     if (!m) return;
 
@@ -380,140 +1004,205 @@ function renderDashboard() {
       };
     }
 
-    if (x.type === "Income") {
-      monthly[m].income += num(x.amount);
+    if (
+      String(x.Type)
+        .toLowerCase() === "income"
+    ) {
+      monthly[m].income +=
+        num(x.Amount);
     } else {
-      monthly[m].expense += num(x.amount);
+      monthly[m].expense +=
+        num(x.Amount);
     }
 
   });
 
-  const labels = Object.keys(monthly)
-    .sort()
-    .slice(-12);
+  const labels =
+    Object.keys(monthly)
+      .sort()
+      .slice(-12);
 
-  makeChart(
-    "mainChart",
-    "bar",
-    labels,
-    [
-      {
-        label: "Income",
-        data: labels.map(x => monthly[x].income)
-      },
-      {
-        label: "Expense",
-        data: labels.map(x => monthly[x].expense)
-      }
-    ]
-  );
+  if ($("mainChart")) {
 
-  const categories = {};
+    if (charts.mainChart) {
+      charts.mainChart.destroy();
+    }
 
-  rows
-    .filter(x => x.type === "Expense")
+    charts.mainChart =
+      new Chart(
+        $("mainChart"),
+        {
+
+          type: "bar",
+
+          data: {
+
+            labels,
+
+            datasets: [
+
+              {
+                label: "Income",
+
+                data:
+                  labels.map(
+                    m =>
+                      monthly[m].income
+                  )
+              },
+
+              {
+                label: "Expense",
+
+                data:
+                  labels.map(
+                    m =>
+                      monthly[m].expense
+                  )
+              }
+
+            ]
+
+          },
+
+          options: {
+            responsive: true,
+            maintainAspectRatio: false
+          }
+
+        }
+      );
+
+  }
+
+  const cats = {};
+
+  p
+    .filter(
+      x =>
+        String(x.Type)
+          .toLowerCase() === "expense"
+    )
     .forEach(x => {
 
-      const cat = x.category || "Other";
+      const c =
+        x.Category || "Other";
 
-      categories[cat] =
-        (categories[cat] || 0) +
-        num(x.amount);
+      cats[c] =
+        (cats[c] || 0) +
+        num(x.Amount);
 
     });
 
-  makeChart(
+  chart(
     "expenseChart",
     "doughnut",
-    Object.keys(categories),
-    [
-      {
-        label: "Expense",
-        data: Object.values(categories)
-      }
-    ]
+    Object.keys(cats),
+    Object.values(cats),
+    "Expense"
   );
 
 }
 
 function resetDashFilters() {
 
-  $("dashMonth").value = currentMonth();
+  if ($("dashMonth")) {
+    $("dashMonth").value = ym();
+  }
 
-  $("dashCategory").value = "";
+  if ($("dashCategory")) {
+    $("dashCategory").value = "";
+  }
 
-  renderDashboard();
+  render();
 
 }
 
-/* =========================================================
-   PASSBOOK
-========================================================= */
+// =========================================================
+// PASSBOOK
+// =========================================================
 
-function addPassbook() {
+async function addPassbook() {
 
-  const editId = $("pbEditId").value;
+  const amount =
+    num($("pbAmt").value);
 
-  const item = {
-
-    id: editId || uid(),
-
-    date:
-      $("pbDate").value ||
-      today(),
-
-    type:
-      $("pbType").value,
-
-    category:
-      $("pbCat").value.trim() ||
-      "Other",
-
-    amount:
-      num($("pbAmt").value),
-
-    account:
-      $("pbAccount").value.trim(),
-
-    remarks:
-      $("pbRemarks").value.trim()
-
-  };
-
-  if (item.amount <= 0) {
-
-    toast("Enter valid amount");
-
-    return;
-
+  if (amount <= 0) {
+    return toast(
+      "Enter valid amount"
+    );
   }
 
-  if (editId) {
+  const record =
+    await save(
+      "passbook",
+      {
 
-    const index =
-      db.passbook.findIndex(
-        x => x.id === editId
-      );
+        ID:
+          $("pbEditId").value ||
+          uid(),
 
-    if (index >= 0) {
+        Date:
+          $("pbDate").value ||
+          today(),
 
-      db.passbook[index] = item;
+        Type:
+          $("pbType").value,
 
-    }
+        Category:
+          $("pbCat").value.trim() ||
+          "Other",
 
-    toast("Entry updated");
+        Amount:
+          amount,
 
-  } else {
+        Account:
+          $("pbAccount").value.trim(),
 
-    db.passbook.push(item);
+        Remarks:
+          $("pbRemarks").value.trim()
 
-    toast("Entry saved");
-
-  }
+      }
+    );
 
   clearPassbook();
 
-  saveAll();
+  return record;
+
+}
+
+function editPassbook(id) {
+
+  const x =
+    arr("passbook").find(
+      x => x.ID === id
+    );
+
+  if (!x) return;
+
+  $("pbEditId").value =
+    x.ID;
+
+  $("pbDate").value =
+    x.Date || today();
+
+  $("pbType").value =
+    x.Type || "Expense";
+
+  $("pbCat").value =
+    x.Category || "";
+
+  $("pbAmt").value =
+    x.Amount || "";
+
+  $("pbAccount").value =
+    x.Account || "";
+
+  $("pbRemarks").value =
+    x.Remarks || "";
+
+  $("pbSaveBtn").textContent =
+    "Update";
 
 }
 
@@ -521,9 +1210,11 @@ function clearPassbook() {
 
   $("pbEditId").value = "";
 
-  $("pbDate").value = today();
+  $("pbDate").value =
+    today();
 
-  $("pbType").value = "Expense";
+  $("pbType").value =
+    "Expense";
 
   $("pbCat").value = "";
 
@@ -533,348 +1224,370 @@ function clearPassbook() {
 
   $("pbRemarks").value = "";
 
-  $("pbSaveBtn").textContent = "Save";
-
-}
-
-function editPassbook(id) {
-
-  const x =
-    db.passbook.find(
-      x => x.id === id
-    );
-
-  if (!x) return;
-
-  $("pbEditId").value = x.id;
-
-  $("pbDate").value = x.date;
-
-  $("pbType").value = x.type;
-
-  $("pbCat").value = x.category;
-
-  $("pbAmt").value = x.amount;
-
-  $("pbAccount").value = x.account;
-
-  $("pbRemarks").value = x.remarks;
-
-  $("pbSaveBtn").textContent = "Update";
-
-}
-
-function getPassbookRows() {
-
-  const month =
-    $("pbFilterMonth").value;
-
-  const category =
-    $("pbFilterCategory").value;
-
-  return db.passbook
-    .filter(x => {
-
-      const monthMatch =
-        !month ||
-        String(x.date || "")
-          .startsWith(month);
-
-      const categoryMatch =
-        !category ||
-        x.category === category;
-
-      return monthMatch &&
-        categoryMatch;
-
-    })
-    .sort((a, b) =>
-      String(b.date).localeCompare(
-        String(a.date)
-      )
-    );
+  $("pbSaveBtn").textContent =
+    "Save";
 
 }
 
 function renderPassbook() {
 
+  const month =
+    $("pbFilterMonth")?.value ||
+    "";
+
+  const category =
+    $("pbFilterCategory")?.value ||
+    "";
+
   const rows =
-    getPassbookRows();
+    filterPassbook(
+      arr("passbook"),
+      month,
+      category
+    )
+      .slice()
+      .sort(
+        (a, b) =>
+          String(b.Date)
+            .localeCompare(
+              String(a.Date)
+            )
+      );
 
   const income =
     rows
-      .filter(x => x.type === "Income")
+      .filter(
+        x =>
+          String(x.Type)
+            .toLowerCase() === "income"
+      )
       .reduce(
         (s, x) =>
-          s + num(x.amount),
+          s + num(x.Amount),
         0
       );
 
   const expense =
     rows
-      .filter(x => x.type === "Expense")
+      .filter(
+        x =>
+          String(x.Type)
+            .toLowerCase() === "expense"
+      )
       .reduce(
         (s, x) =>
-          s + num(x.amount),
+          s + num(x.Amount),
         0
       );
 
-  $("passbookDash").innerHTML =
+  $("passbookDash").innerHTML = [
 
-    card("Income", income) +
+    ["Income", money(income)],
 
-    card("Expense", expense) +
+    ["Expense", money(expense)],
 
-    card(
-      "Balance",
-      income - expense
-    );
+    ["Balance", money(income - expense)],
 
-  const categories = {};
+    ["Entries", rows.length]
+
+  ]
+    .map(
+      x => card(
+        x[0],
+        x[1]
+      )
+    )
+    .join("");
+
+  $("pbList").innerHTML =
+    rows
+      .map(
+        x => `
+          <div class="item">
+
+            <span>
+
+              <b>
+                ${x.Category || "Other"}
+              </b>
+
+              <br>
+
+              <small>
+
+                ${x.Date || ""}
+
+                •
+
+                ${x.Type || ""}
+
+                ${
+                  x.Account
+                    ? " • " + x.Account
+                    : ""
+                }
+
+                <br>
+
+                ${x.Remarks || ""}
+
+              </small>
+
+            </span>
+
+            <span>
+
+              <b>
+                ${money(x.Amount)}
+              </b>
+
+              <button
+                class="secondary"
+                onclick="editPassbook('${x.ID}')"
+              >
+                Edit
+              </button>
+
+              <button
+                class="danger"
+                onclick="del('passbook','${x.ID}')"
+              >
+                Delete
+              </button>
+
+            </span>
+
+          </div>
+        `
+      )
+      .join("") ||
+    "<p>No records</p>";
+
+  const cats = {};
 
   rows.forEach(x => {
 
-    const cat =
-      x.category || "Other";
+    const c =
+      x.Category ||
+      "Other";
 
-    categories[cat] =
-      (categories[cat] || 0) +
-      num(x.amount);
+    cats[c] =
+      (cats[c] || 0) +
+      num(x.Amount);
 
   });
 
-  makeChart(
+  chart(
     "passbookChart",
     "doughnut",
-    Object.keys(categories),
-    [
-      {
-        label: "Amount",
-        data: Object.values(categories)
-      }
-    ]
+    Object.keys(cats),
+    Object.values(cats),
+    "Amount"
   );
-
-  $("pbList").innerHTML =
-    rows.length
-      ? rows.map(x => `
-        <div class="item">
-
-          <div>
-            <b>${x.category}</b>
-
-            <div class="muted">
-              ${x.date} • ${x.type}
-              ${x.account ? " • " + x.account : ""}
-            </div>
-
-            <div class="muted">
-              ${x.remarks || ""}
-            </div>
-          </div>
-
-          <div>
-            <b>${money(x.amount)}</b>
-
-            <button
-              class="secondary"
-              onclick="editPassbook('${x.id}')"
-            >
-              Edit
-            </button>
-
-            <button
-              class="danger"
-              onclick="removeItem('passbook','${x.id}')"
-            >
-              Delete
-            </button>
-          </div>
-
-        </div>
-      `).join("")
-
-      : `<div class="item">
-          No entries found.
-        </div>`;
 
 }
 
 function resetPassbookFilters() {
 
-  $("pbFilterMonth").value = "";
+  if ($("pbFilterMonth")) {
+    $("pbFilterMonth").value = "";
+  }
 
-  $("pbFilterCategory").value = "";
+  if ($("pbFilterCategory")) {
+    $("pbFilterCategory").value = "";
+  }
 
-  renderPassbook();
+  render();
 
 }
+// =========================================================
+// SALARY
+// =========================================================
 
-/* =========================================================
-   SALARY
-========================================================= */
-
-function addSalary() {
+async function addSalary() {
 
   const amount =
     num($("salAmount").value);
 
   if (amount <= 0) {
-
-    toast("Enter salary amount");
-
-    return;
-
+    return toast(
+      "Enter salary amount"
+    );
   }
 
-  db.salary.push({
+  await save(
+    "salary",
+    {
 
-    id: uid(),
+      ID:
+        uid(),
 
-    month:
-      $("salMonth").value ||
-      currentMonth(),
+      Month:
+        $("salMonth").value ||
+        ym(),
 
-    company:
-      $("salCompany").value.trim() ||
-      "Company",
+      Company:
+        $("salCompany").value.trim() ||
+        "Company",
 
-    amount,
+      Amount:
+        amount,
 
-    remarks:
-      $("salRemarks").value.trim()
+      Remarks:
+        $("salRemarks").value.trim()
 
-  });
+    }
+  );
 
   $("salAmount").value = "";
 
   $("salRemarks").value = "";
-
-  saveAll();
-
-  toast("Salary saved");
 
 }
 
 function renderSalary() {
 
   const rows =
-    [...db.salary]
-      .sort((a, b) =>
-        String(b.month)
-          .localeCompare(
-            String(a.month)
-          )
+    arr("salary")
+      .slice()
+      .sort(
+        (a, b) =>
+          String(b.Month)
+            .localeCompare(
+              String(a.Month)
+            )
       );
 
   const total =
     rows.reduce(
       (s, x) =>
-        s + num(x.amount),
+        s + num(x.Amount),
       0
     );
 
-  const average =
-    rows.length
-      ? total / rows.length
-      : 0;
-
-  $("salaryDash").innerHTML =
-
-    card(
-      "Latest Salary",
-      rows[0]?.amount || 0
-    ) +
-
-    card(
-      "Total Salary",
-      total
-    ) +
-
-    card(
-      "Average Salary",
-      average
-    );
-
-  makeChart(
-    "salaryChart",
-    "line",
+  const current =
     rows
-      .slice()
-      .reverse()
-      .map(x => x.month),
+      .filter(
+        x => x.Month === ym()
+      )
+      .reduce(
+        (s, x) =>
+          s + num(x.Amount),
+        0
+      );
+
+  $("salaryDash").innerHTML = [
+
+    ["This Month", money(current)],
+
+    ["Total Salary", money(total)],
+
+    ["Entries", rows.length],
+
     [
-      {
-        label: "Salary",
-        data: rows
-          .slice()
-          .reverse()
-          .map(x => num(x.amount))
-      }
+      "Companies",
+      new Set(
+        rows
+          .map(x => x.Company)
+          .filter(Boolean)
+      ).size
     ]
-  );
+
+  ]
+    .map(
+      x => card(
+        x[0],
+        x[1]
+      )
+    )
+    .join("");
 
   $("salaryList").innerHTML =
-    rows.map(x => `
-      <div class="item">
+    rows
+      .map(
+        x =>
+          item(
+            `${x.Month} • <b>${x.Company}</b><br><small>${x.Remarks || ""}</small>`,
 
-        <div>
-          <b>${x.company}</b>
+            money(x.Amount),
 
-          <div class="muted">
-            ${x.month}
-            ${x.remarks ? " • " + x.remarks : ""}
-          </div>
-        </div>
+            `
+              <button
+                class="danger"
+                onclick="del('salary','${x.ID}')"
+              >
+                Delete
+              </button>
+            `
+          )
+      )
+      .join("") ||
+    "<p>No salary records</p>";
 
-        <div>
-          <b>${money(x.amount)}</b>
+  const map = {};
 
-          <button
-            class="danger"
-            onclick="removeItem('salary','${x.id}')"
-          >
-            Delete
-          </button>
-        </div>
+  rows.forEach(x => {
 
-      </div>
-    `).join("");
+    map[x.Month] =
+      (map[x.Month] || 0) +
+      num(x.Amount);
+
+  });
+
+  const labels =
+    Object.keys(map).sort();
+
+  chart(
+    "salaryChart",
+    "line",
+    labels,
+    labels.map(
+      k => map[k]
+    ),
+    "Salary"
+  );
 
 }
 
-/* =========================================================
-   LOANS
-========================================================= */
+// =========================================================
+// LOANS + EMI
+// =========================================================
 
-function addLoan() {
+async function addLoan() {
 
   const name =
     $("loanName").value.trim();
 
-  const initial =
+  const amount =
     num($("loanInitial").value);
 
-  if (!name || initial <= 0) {
-
-    toast("Enter loan details");
-
-    return;
-
+  if (
+    !name ||
+    amount <= 0
+  ) {
+    return toast(
+      "Enter loan details"
+    );
   }
 
-  db.loans.push({
+  await save(
+    "loans",
+    {
 
-    id: uid(),
+      ID:
+        uid(),
 
-    name,
+      "Loan Name":
+        name,
 
-    initial,
+      "Initial Amount":
+        amount,
 
-    remarks:
-      $("loanRemarks").value.trim()
+      Remarks:
+        $("loanRemarks").value.trim()
 
-  });
+    }
+  );
 
   $("loanName").value = "";
 
@@ -882,183 +1595,207 @@ function addLoan() {
 
   $("loanRemarks").value = "";
 
-  saveAll();
-
-  toast("Loan added");
-
 }
 
-function addEmi() {
+async function addEmi() {
 
-  const loanId =
-    $("emiLoan").value;
+  if (
+    !$("emiLoan").value
+  ) {
+    return toast(
+      "Select loan"
+    );
+  }
 
   const amount =
     num($("emiAmount").value);
 
-  if (!loanId || amount <= 0) {
-
-    toast("Select loan and enter EMI");
-
-    return;
-
+  if (amount <= 0) {
+    return toast(
+      "Enter EMI amount"
+    );
   }
 
-  db.emis.push({
+  await save(
+    "emi",
+    {
 
-    id: uid(),
+      ID:
+        uid(),
 
-    loanId,
+      "Loan ID":
+        $("emiLoan").value,
 
-    month:
-      $("emiMonth").value ||
-      currentMonth(),
+      Month:
+        $("emiMonth").value ||
+        ym(),
 
-    amount,
+      Amount:
+        amount,
 
-    remarks:
-      $("emiRemarks").value.trim()
+      Remarks:
+        $("emiRemarks").value.trim()
 
-  });
+    }
+  );
 
   $("emiAmount").value = "";
 
   $("emiRemarks").value = "";
 
-  saveAll();
-
-  toast("EMI saved");
-
-}
-
-function getLoanPaid(id) {
-
-  return db.emis
-    .filter(x => x.loanId === id)
-    .reduce(
-      (s, x) =>
-        s + num(x.amount),
-      0
-    );
-
 }
 
 function renderLoans() {
 
-  const totalLoan =
-    db.loans.reduce(
+  const loans =
+    arr("loans");
+
+  const emi =
+    arr("emi");
+
+  const initial =
+    loans.reduce(
       (s, x) =>
-        s + num(x.initial),
+        s +
+        num(
+          x["Initial Amount"]
+        ),
       0
     );
 
   const paid =
-    db.emis.reduce(
+    emi.reduce(
       (s, x) =>
-        s + num(x.amount),
+        s + num(x.Amount),
       0
     );
 
-  $("loanDash").innerHTML =
-
-    card(
-      "Total Loan",
-      totalLoan
-    ) +
-
-    card(
-      "EMI Paid",
-      paid
-    ) +
-
-    card(
-      "Outstanding",
-      Math.max(
-        0,
-        totalLoan - paid
+  const paidMonth =
+    emi
+      .filter(
+        x =>
+          x.Month === ym()
       )
-    );
+      .reduce(
+        (s, x) =>
+          s + num(x.Amount),
+        0
+      );
 
-  makeChart(
-    "loanChart",
-    "bar",
-    db.loans.map(x => x.name),
+  $("loanDash").innerHTML = [
+
+    ["Total Loan", money(initial)],
+
+    ["EMI This Month", money(paidMonth)],
+
+    ["Total EMI Paid", money(paid)],
+
     [
-      {
-        label: "Outstanding",
-        data:
-          db.loans.map(x =>
-            Math.max(
-              0,
-              num(x.initial) -
-                getLoanPaid(x.id)
-            )
-          )
-      }
-    ]
-  );
-
-  $("loanList").innerHTML =
-    db.loans.map(x => {
-
-      const paid =
-        getLoanPaid(x.id);
-
-      const balance =
+      "Outstanding",
+      money(
         Math.max(
           0,
-          num(x.initial) -
-            paid
+          initial - paid
+        )
+      )
+    ]
+
+  ]
+    .map(
+      x => card(
+        x[0],
+        x[1]
+      )
+    )
+    .join("");
+
+  $("loanList").innerHTML =
+    loans
+      .map(x => {
+
+        const paidLoan =
+          emi
+            .filter(
+              e =>
+                e["Loan ID"] === x.ID
+            )
+            .reduce(
+              (s, e) =>
+                s + num(e.Amount),
+              0
+            );
+
+        return item(
+
+          `
+            <b>
+              ${x["Loan Name"]}
+            </b>
+
+            <br>
+
+            <small>
+
+              Initial
+              ${money(x["Initial Amount"])}
+
+              •
+
+              Paid
+              ${money(paidLoan)}
+
+              •
+
+              Balance
+              ${money(
+                Math.max(
+                  0,
+                  num(x["Initial Amount"]) -
+                  paidLoan
+                )
+              )}
+
+            </small>
+          `,
+
+          "",
+
+          `
+            <button
+              class="danger"
+              onclick="del('loans','${x.ID}')"
+            >
+              Delete
+            </button>
+          `
+
         );
 
-      return `
-        <div class="item">
+      })
+      .join("") ||
+    "<p>No loans</p>";
 
-          <div>
-            <b>${x.name}</b>
-
-            <div class="muted">
-              Original: ${money(x.initial)}
-              • Paid: ${money(paid)}
-              • Balance: ${money(balance)}
-            </div>
-          </div>
-
-          <button
-            class="danger"
-            onclick="deleteLoan('${x.id}')"
-          >
-            Delete
-          </button>
-
-        </div>
-      `;
-
-    }).join("");
+  chart(
+    "loanChart",
+    "doughnut",
+    [
+      "Initial Loan",
+      "EMI Paid"
+    ],
+    [
+      initial,
+      paid
+    ],
+    "Amount"
+  );
 
 }
 
-function deleteLoan(id) {
+// =========================================================
+// GIVE & TAKE
+// =========================================================
 
-  db.loans =
-    db.loans.filter(
-      x => x.id !== id
-    );
-
-  db.emis =
-    db.emis.filter(
-      x => x.loanId !== id
-    );
-
-  saveAll();
-
-}
-
-/* =========================================================
-   GIVE & TAKE
-========================================================= */
-
-function addGive() {
+async function addGive() {
 
   const person =
     $("gtPerson").value.trim();
@@ -1066,239 +1803,281 @@ function addGive() {
   const amount =
     num($("gtAmount").value);
 
-  if (!person || amount <= 0) {
-
-    toast("Enter person and amount");
-
-    return;
-
+  if (
+    !person ||
+    amount <= 0
+  ) {
+    return toast(
+      "Enter person and amount"
+    );
   }
 
-  db.giveTake.push({
+  await save(
+    "transactions",
+    {
 
-    id: uid(),
+      ID:
+        uid(),
 
-    person,
+      Person:
+        person,
 
-    type:
-      $("gtType").value,
+      Type:
+        $("gtType").value,
 
-    amount,
+      Amount:
+        amount,
 
-    date:
-      $("gtDate").value ||
-      today(),
+      Date:
+        $("gtDate").value ||
+        today(),
 
-    purpose:
-      $("gtPurpose").value.trim(),
+      Purpose:
+        $("gtPurpose").value.trim(),
 
-    notes:
-      $("gtNotes").value.trim()
+      Notes:
+        $("gtNotes").value.trim(),
 
-  });
+      Revisions:
+        "[]"
+
+    }
+  );
 
   [
     "gtPerson",
     "gtAmount",
     "gtPurpose",
     "gtNotes"
-  ].forEach(id =>
-    $(id).value = ""
-  );
+  ].forEach(id => {
 
-  saveAll();
+    $(id).value = "";
 
-  toast("Saved");
-
-}
-
-function getPersonBalance(person) {
-
-  let balance = 0;
-
-  db.giveTake
-    .filter(x => x.person === person)
-    .forEach(x => {
-
-      if (
-        x.type === "Give" ||
-        x.type === "Pay"
-      ) {
-
-        balance +=
-          num(x.amount);
-
-      } else {
-
-        balance -=
-          num(x.amount);
-
-      }
-
-    });
-
-  return balance;
+  });
 
 }
 
 function renderGiveTake() {
 
-  const persons =
-    [...new Set(
-      db.giveTake.map(
-        x => x.person
-      )
-    )];
+  const balances =
+    Object.values(
+      giveBalances()
+    );
 
   const receive =
-    persons.reduce(
-      (s, person) =>
-        s +
-        Math.max(
-          0,
-          getPersonBalance(person)
-        ),
-      0
-    );
+    balances
+      .filter(
+        x =>
+          x.balance > 0
+      )
+      .reduce(
+        (s, x) =>
+          s + x.balance,
+        0
+      );
 
   const pay =
-    persons.reduce(
-      (s, person) =>
-        s +
-        Math.max(
-          0,
-          -getPersonBalance(person)
-        ),
-      0
-    );
+    balances
+      .filter(
+        x =>
+          x.balance < 0
+      )
+      .reduce(
+        (s, x) =>
+          s +
+          Math.abs(
+            x.balance
+          ),
+        0
+      );
 
-  $("giveDash").innerHTML =
+  $("giveDash").innerHTML = [
 
-    card(
+    [
       "To Receive",
-      receive
-    ) +
+      money(receive)
+    ],
 
-    card(
+    [
       "To Pay",
-      pay
-    ) +
+      money(pay)
+    ],
 
-    card(
+    [
       "Net",
-      receive - pay
-    );
+      money(receive - pay)
+    ],
+
+    [
+      "People",
+      balances.length
+    ]
+
+  ]
+    .map(
+      x =>
+        card(
+          x[0],
+          x[1]
+        )
+    )
+    .join("");
 
   $("gtDashboard").innerHTML =
-    persons.map(person => {
+    balances
+      .map(x =>
+        card(
+          `
+            ${x.person}
+            •
+            ${
+              x.balance > 0
+                ? "To Receive"
+                : x.balance < 0
+                  ? "To Pay"
+                  : "Settled"
+            }
+          `,
 
-      const balance =
-        getPersonBalance(person);
-
-      return card(
-        person +
-        (balance >= 0
-          ? " - Receive"
-          : " - Pay"),
-        Math.abs(balance)
-      );
-
-    }).join("");
-
-  makeChart(
-    "giveChart",
-    "bar",
-    persons,
-    [
-      {
-        label: "Balance",
-        data:
-          persons.map(
-            getPersonBalance
+          money(
+            Math.abs(
+              x.balance
+            )
           )
-      }
-    ]
-  );
-
-  const rows =
-    [...db.giveTake]
-      .sort((a, b) =>
-        String(b.date)
-          .localeCompare(
-            String(a.date)
-          )
-      );
+        )
+      )
+      .join("");
 
   $("gtList").innerHTML =
-    rows.map(x => `
-      <div class="item">
+    arr("transactions")
+      .slice()
+      .sort(
+        (a, b) =>
+          String(b.Date)
+            .localeCompare(
+              String(a.Date)
+            )
+      )
+      .map(x =>
+        item(
 
-        <div>
-          <b>
-            ${x.person}
-            • ${x.type}
-          </b>
+          `
+            <b>
+              ${x.Person}
+            </b>
 
-          <div class="muted">
-            ${x.date}
-            • ${x.purpose || ""}
-          </div>
-        </div>
+            •
 
-        <div>
-          <b>${money(x.amount)}</b>
+            ${x.Type}
 
-          <button
-            class="danger"
-            onclick="removeItem('giveTake','${x.id}')"
-          >
-            Delete
-          </button>
-        </div>
+            <br>
 
-      </div>
-    `).join("");
+            <small>
+              ${x.Date || ""}
+              •
+              ${x.Purpose || ""}
+            </small>
+          `,
+
+          money(x.Amount),
+
+          `
+            <button
+              class="danger"
+              onclick="del('transactions','${x.ID}')"
+            >
+              Delete
+            </button>
+          `
+
+        )
+      )
+      .join("") ||
+    "<p>No records</p>";
+
+  chart(
+    "giveChart",
+    "bar",
+
+    balances.map(
+      x => x.person
+    ),
+
+    balances.map(
+      x =>
+        Math.abs(
+          x.balance
+        )
+    ),
+
+    "Outstanding"
+  );
 
 }
 
-/* =========================================================
-   INVESTMENT & SIP
-========================================================= */
+// =========================================================
+// INVESTMENTS & SIP
+// =========================================================
 
-function addBasket() {
+async function addBasket() {
 
   const name =
+    $("sipPerson").value.trim();
+
+  const basket =
     $("sipBasket").value.trim();
 
-  if (!name) {
+  if (
+    !name ||
+    !basket
+  ) {
+    return toast(
+      "Enter person and basket"
+    );
+  }
 
-    toast("Enter basket name");
+  let person =
+    arr("people").find(
+      x =>
+        String(x.Name)
+          .toLowerCase() ===
+        name.toLowerCase()
+    );
 
-    return;
+  if (!person) {
+
+    person =
+      await save(
+        "people",
+        {
+          ID: uid(),
+          Name: name
+        }
+      );
 
   }
 
-  db.baskets.push({
+  await save(
+    "baskets",
+    {
 
-    id: uid(),
+      ID:
+        uid(),
 
-    person:
-      $("sipPerson").value.trim() ||
-      "Ankit",
+      "Person ID":
+        person.ID,
 
-    name
+      "Basket Name":
+        basket
 
-  });
+    }
+  );
 
   $("sipBasket").value = "";
 
-  saveAll();
-
-  toast("Basket created");
-
 }
 
-function addAsset() {
+async function addAsset() {
 
   const basketId =
     $("assetBasket").value;
@@ -1307,654 +2086,1346 @@ function addAsset() {
     $("assetName").value.trim();
 
   const amount =
-    num($("assetAmount").value);
+    num(
+      $("assetAmount").value
+    );
 
   if (
     !basketId ||
     !name ||
     amount <= 0
   ) {
-
-    toast("Complete asset details");
-
-    return;
-
+    return toast(
+      "Complete asset details"
+    );
   }
 
-  db.assets.push({
+  await save(
+    "assets",
+    {
 
-    id: uid(),
+      ID:
+        uid(),
 
-    basketId,
+      "Basket ID":
+        basketId,
 
-    name,
+      "Asset Name":
+        name,
 
-    type:
-      $("assetType").value,
+      "Asset Type":
+        $("assetType").value,
 
-    amount
+      "Monthly Amount":
+        amount
 
-  });
+    }
+  );
 
   $("assetName").value = "";
 
   $("assetAmount").value = "";
 
-  saveAll();
+}
 
-  toast("Asset added");
+async function markBasket(
+  id,
+  total
+) {
+
+  const already =
+    arr("sipPayments").some(
+      x =>
+        x["Basket ID"] === id &&
+        x.Month === ym()
+    );
+
+  if (already) {
+    return toast(
+      "This basket is already marked paid"
+    );
+  }
+
+  await save(
+    "sipPayments",
+    {
+
+      ID:
+        uid(),
+
+      "Basket ID":
+        id,
+
+      Month:
+        ym(),
+
+      Amount:
+        total,
+
+      "Paid At":
+        new Date()
+          .toISOString()
+
+    }
+  );
 
 }
 
-/* IMPORTANT:
-   This function fixes your "invest is not defined" issue.
-*/
 function renderInvestments() {
 
-  const total =
-    db.assets.reduce(
+  const baskets =
+    arr("baskets");
+
+  const people =
+    arr("people");
+
+  const assets =
+    arr("assets");
+
+  const payments =
+    arr("sipPayments");
+
+  const plan =
+    assets.reduce(
       (s, x) =>
-        s + num(x.amount),
+        s +
+        num(
+          x["Monthly Amount"]
+        ),
       0
     );
+
+  const paid =
+    payments
+      .filter(
+        x =>
+          x.Month === ym()
+      )
+      .reduce(
+        (s, x) =>
+          s + num(x.Amount),
+        0
+      );
+
+  $("investmentDash").innerHTML = [
+
+    [
+      "Monthly Planned",
+      money(plan)
+    ],
+
+    [
+      "Paid This Month",
+      money(paid)
+    ],
+
+    [
+      "Pending",
+      money(
+        Math.max(
+          0,
+          plan - paid
+        )
+      )
+    ],
+
+    [
+      "Baskets",
+      baskets.length
+    ]
+
+  ]
+    .map(
+      x =>
+        card(
+          x[0],
+          x[1]
+        )
+    )
+    .join("");
+
+  $("basketList").innerHTML =
+    baskets
+      .map(b => {
+
+        const person =
+          people.find(
+            x =>
+              x.ID ===
+              b["Person ID"]
+          );
+
+        const basketAssets =
+          assets.filter(
+            x =>
+              x["Basket ID"] ===
+              b.ID
+          );
+
+        const total =
+          basketAssets.reduce(
+            (s, x) =>
+              s +
+              num(
+                x["Monthly Amount"]
+              ),
+            0
+          );
+
+        const paidThisMonth =
+          payments.some(
+            x =>
+              x["Basket ID"] === b.ID &&
+              x.Month === ym()
+          );
+
+        return `
+          <div class="box">
+
+            <h3>
+              ${person?.Name || ""}
+              —
+              ${b["Basket Name"]}
+            </h3>
+
+            <b>
+              ${money(total)}
+              / month
+            </b>
+
+            ${basketAssets
+              .map(a => `
+                <div class="item">
+
+                  <span>
+
+                    <b>
+                      ${a["Asset Name"]}
+                    </b>
+
+                    <br>
+
+                    <small>
+                      ${a["Asset Type"]}
+                    </small>
+
+                  </span>
+
+                  <span>
+
+                    ${money(
+                      a["Monthly Amount"]
+                    )}
+
+                    <button
+                      class="danger"
+                      onclick="del('assets','${a.ID}')"
+                    >
+                      Delete
+                    </button>
+
+                  </span>
+
+                </div>
+              `)
+              .join("")
+            }
+
+            <div
+              style="margin-top:10px"
+            >
+
+              ${
+                paidThisMonth
+                  ? "✓ PAID THIS MONTH"
+                  : `
+                    <button
+                      onclick="markBasket('${b.ID}',${total})"
+                    >
+                      Mark Paid
+                    </button>
+                  `
+              }
+
+              <button
+                class="danger"
+                onclick="deleteBasket('${b.ID}')"
+              >
+                Delete Basket
+              </button>
+
+            </div>
+
+          </div>
+        `;
+
+      })
+      .join("") ||
+    "<p>No baskets</p>";
 
   const byType = {};
 
-  db.assets.forEach(x => {
+  assets.forEach(a => {
 
-    byType[x.type] =
-      (byType[x.type] || 0) +
-      num(x.amount);
+    const type =
+      a["Asset Type"] ||
+      "Other";
+
+    byType[type] =
+      (byType[type] || 0) +
+      num(
+        a["Monthly Amount"]
+      );
 
   });
 
-  $("investmentDash").innerHTML =
-
-    card(
-      "Monthly SIP",
-      total
-    ) +
-
-    card(
-      "Annual Investment",
-      total * 12
-    ) +
-
-    card(
-      "Total Assets",
-      db.assets.length
-    ) +
-
-    card(
-      "Baskets",
-      db.baskets.length
-    );
-
-  makeChart(
+  chart(
     "investmentChart",
     "doughnut",
     Object.keys(byType),
-    [
-      {
-        label: "Monthly SIP",
-        data:
-          Object.values(byType)
-      }
-    ]
+    Object.values(byType),
+    "Monthly SIP"
   );
 
-  $("basketList").innerHTML =
-    db.baskets.map(basket => {
-
-      const assets =
-        db.assets.filter(
-          x =>
-            x.basketId ===
-            basket.id
-        );
-
-      const total =
-        assets.reduce(
-          (s, x) =>
-            s + num(x.amount),
-          0
-        );
-
-      return `
-        <div class="box">
-
-          <h3>
-            ${basket.name}
-          </h3>
-
-          <p>
-            ${basket.person}
-          </p>
-
-          <b>
-            ${money(total)}
-            / month
-          </b>
-
-          ${assets.map(asset => `
-            <div class="item">
-
-              <div>
-                <b>
-                  ${asset.name}
-                </b>
-
-                <div class="muted">
-                  ${asset.type}
-                </div>
-              </div>
-
-              <div>
-                <b>
-                  ${money(asset.amount)}
-                </b>
-
-                <button
-                  class="danger"
-                  onclick="removeItem('assets','${asset.id}')"
-                >
-                  Delete
-                </button>
-              </div>
-
-            </div>
-          `).join("")}
-
-          <button
-            class="danger"
-            onclick="deleteBasket('${basket.id}')"
-          >
-            Delete Basket
-          </button>
-
-        </div>
-      `;
-
-    }).join("");
-
 }
 
-function deleteBasket(id) {
-
-  db.baskets =
-    db.baskets.filter(
-      x => x.id !== id
-    );
-
-  db.assets =
-    db.assets.filter(
-      x => x.basketId !== id
-    );
-
-  saveAll();
-
-}
-
-/* =========================================================
-   VEHICLES
-========================================================= */
-
-function addVehicle() {
-
-  const name =
-    $("vehicleName").value.trim();
-
-  if (!name) {
-
-    toast("Enter vehicle name");
-
-    return;
-
-  }
-
-  db.vehicles.push({
-
-    id: uid(),
-
-    name,
-
-    type:
-      $("vehicleType").value,
-
-    plate:
-      $("vehiclePlate").value.trim()
-
-  });
-
-  $("vehicleName").value = "";
-
-  $("vehiclePlate").value = "";
-
-  saveAll();
-
-  toast("Vehicle added");
-
-}
-
-function addFuel() {
-
-  const vehicleId =
-    $("fuelVehicle").value;
-
-  const amount =
-    num($("fuelAmount").value);
+async function deleteBasket(id) {
 
   if (
-    !vehicleId ||
-    amount <= 0
+    !confirm(
+      "Delete this basket and its assets?"
+    )
+  ) {
+    return;
+  }
+
+  const assets =
+    arr("assets").filter(
+      x =>
+        x["Basket ID"] === id
+    );
+
+  for (
+    const asset of assets
   ) {
 
-    toast("Select vehicle and amount");
-
-    return;
-
-  }
-
-  db.fuel.push({
-
-    id: uid(),
-
-    vehicleId,
-
-    date:
-      $("fuelDate").value ||
-      today(),
-
-    odo:
-      num($("fuelOdo").value),
-
-    qty:
-      num($("fuelQty").value),
-
-    amount,
-
-    type:
-      $("fuelType").value,
-
-    notes:
-      $("fuelNotes").value.trim()
-
-  });
-
-  [
-    "fuelOdo",
-    "fuelQty",
-    "fuelAmount",
-    "fuelNotes"
-  ].forEach(
-    id => $(id).value = ""
-  );
-
-  saveAll();
-
-  toast("Fuel saved");
-
-}
-
-function addMaintenance() {
-
-  const vehicleId =
-    $("maintVehicle").value;
-
-  if (!vehicleId) {
-
-    toast("Select vehicle");
-
-    return;
+    await api(
+      "delete",
+      {
+        table: "assets",
+        id: asset.ID
+      }
+    );
 
   }
 
-  db.maintenance.push({
+  const payments =
+    arr("sipPayments").filter(
+      x =>
+        x["Basket ID"] === id
+    );
 
-    id: uid(),
+  for (
+    const payment of payments
+  ) {
 
-    vehicleId,
+    await api(
+      "delete",
+      {
+        table: "sipPayments",
+        id: payment.ID
+      }
+    );
 
-    date:
-      $("maintDate").value ||
-      today(),
+  }
 
-    category:
-      $("maintCategory").value,
-
-    amount:
-      num($("maintAmount").value),
-
-    odo:
-      num($("maintOdo").value),
-
-    targetKm:
-      num($("maintTargetKm").value),
-
-    remarks:
-      $("maintRemarks").value.trim()
-
-  });
-
-  [
-    "maintAmount",
-    "maintOdo",
-    "maintTargetKm",
-    "maintRemarks"
-  ].forEach(
-    id => $(id).value = ""
+  await api(
+    "delete",
+    {
+      table: "baskets",
+      id
+    }
   );
 
-  saveAll();
+  DB.assets =
+    arr("assets").filter(
+      x =>
+        x["Basket ID"] !== id
+    );
 
-  toast("Maintenance saved");
+  DB.sipPayments =
+    arr("sipPayments").filter(
+      x =>
+        x["Basket ID"] !== id
+    );
+
+  DB.baskets =
+    arr("baskets").filter(
+      x =>
+        x.ID !== id
+    );
+
+  persist();
+
+  render();
+
+  toast(
+    "Basket deleted"
+  );
+
+}
+// =========================================================
+// SALARY
+// =========================================================
+
+async function addSalary() {
+
+  const amount =
+    num($("salAmount").value);
+
+  if (amount <= 0) {
+    return toast(
+      "Enter salary amount"
+    );
+  }
+
+  await save(
+    "salary",
+    {
+
+      ID:
+        uid(),
+
+      Month:
+        $("salMonth").value ||
+        ym(),
+
+      Company:
+        $("salCompany").value.trim() ||
+        "Company",
+
+      Amount:
+        amount,
+
+      Remarks:
+        $("salRemarks").value.trim()
+
+    }
+  );
+
+  $("salAmount").value = "";
+
+  $("salRemarks").value = "";
 
 }
 
-function latestOdo(vehicleId) {
+function renderSalary() {
 
   const rows =
-    db.fuel
+    arr("salary")
+      .slice()
+      .sort(
+        (a, b) =>
+          String(b.Month)
+            .localeCompare(
+              String(a.Month)
+            )
+      );
+
+  const total =
+    rows.reduce(
+      (s, x) =>
+        s + num(x.Amount),
+      0
+    );
+
+  const current =
+    rows
+      .filter(
+        x => x.Month === ym()
+      )
+      .reduce(
+        (s, x) =>
+          s + num(x.Amount),
+        0
+      );
+
+  $("salaryDash").innerHTML = [
+
+    ["This Month", money(current)],
+
+    ["Total Salary", money(total)],
+
+    ["Entries", rows.length],
+
+    [
+      "Companies",
+      new Set(
+        rows
+          .map(x => x.Company)
+          .filter(Boolean)
+      ).size
+    ]
+
+  ]
+    .map(
+      x => card(
+        x[0],
+        x[1]
+      )
+    )
+    .join("");
+
+  $("salaryList").innerHTML =
+    rows
+      .map(
+        x =>
+          item(
+            `${x.Month} • <b>${x.Company}</b><br><small>${x.Remarks || ""}</small>`,
+
+            money(x.Amount),
+
+            `
+              <button
+                class="danger"
+                onclick="del('salary','${x.ID}')"
+              >
+                Delete
+              </button>
+            `
+          )
+      )
+      .join("") ||
+    "<p>No salary records</p>";
+
+  const map = {};
+
+  rows.forEach(x => {
+
+    map[x.Month] =
+      (map[x.Month] || 0) +
+      num(x.Amount);
+
+  });
+
+  const labels =
+    Object.keys(map).sort();
+
+  chart(
+    "salaryChart",
+    "line",
+    labels,
+    labels.map(
+      k => map[k]
+    ),
+    "Salary"
+  );
+
+}
+
+// =========================================================
+// LOANS + EMI
+// =========================================================
+
+async function addLoan() {
+
+  const name =
+    $("loanName").value.trim();
+
+  const amount =
+    num($("loanInitial").value);
+
+  if (
+    !name ||
+    amount <= 0
+  ) {
+    return toast(
+      "Enter loan details"
+    );
+  }
+
+  await save(
+    "loans",
+    {
+
+      ID:
+        uid(),
+
+      "Loan Name":
+        name,
+
+      "Initial Amount":
+        amount,
+
+      Remarks:
+        $("loanRemarks").value.trim()
+
+    }
+  );
+
+  $("loanName").value = "";
+
+  $("loanInitial").value = "";
+
+  $("loanRemarks").value = "";
+
+}
+
+async function addEmi() {
+
+  if (
+    !$("emiLoan").value
+  ) {
+    return toast(
+      "Select loan"
+    );
+  }
+
+  const amount =
+    num($("emiAmount").value);
+
+  if (amount <= 0) {
+    return toast(
+      "Enter EMI amount"
+    );
+  }
+
+  await save(
+    "emi",
+    {
+
+      ID:
+        uid(),
+
+      "Loan ID":
+        $("emiLoan").value,
+
+      Month:
+        $("emiMonth").value ||
+        ym(),
+
+      Amount:
+        amount,
+
+      Remarks:
+        $("emiRemarks").value.trim()
+
+    }
+  );
+
+  $("emiAmount").value = "";
+
+  $("emiRemarks").value = "";
+
+}
+
+function renderLoans() {
+
+  const loans =
+    arr("loans");
+
+  const emi =
+    arr("emi");
+
+  const initial =
+    loans.reduce(
+      (s, x) =>
+        s +
+        num(
+          x["Initial Amount"]
+        ),
+      0
+    );
+
+  const paid =
+    emi.reduce(
+      (s, x) =>
+        s + num(x.Amount),
+      0
+    );
+
+  const paidMonth =
+    emi
       .filter(
         x =>
-          x.vehicleId ===
-          vehicleId
+          x.Month === ym()
       )
-      .sort(
-        (a, b) =>
-          num(b.odo) -
-          num(a.odo)
+      .reduce(
+        (s, x) =>
+          s + num(x.Amount),
+        0
       );
 
-  return rows[0]?.odo || 0;
+  $("loanDash").innerHTML = [
 
-}
+    ["Total Loan", money(initial)],
 
-function renderVehicles() {
+    ["EMI This Month", money(paidMonth)],
 
-  const type =
-    $("vehicleTypeFilter").value;
+    ["Total EMI Paid", money(paid)],
 
-  const vehicleId =
-    $("vehicleFilter").value;
-
-  const vehicles =
-    db.vehicles.filter(v => {
-
-      const typeMatch =
-        !type ||
-        v.type === type;
-
-      const vehicleMatch =
-        !vehicleId ||
-        v.id === vehicleId;
-
-      return typeMatch &&
-        vehicleMatch;
-
-    });
-
-  const fuelRows =
-    db.fuel.filter(x =>
-      vehicles.some(
-        v =>
-          v.id ===
-          x.vehicleId
+    [
+      "Outstanding",
+      money(
+        Math.max(
+          0,
+          initial - paid
+        )
       )
-    );
+    ]
 
-  const maintenanceRows =
-    db.maintenance.filter(x =>
-      vehicles.some(
-        v =>
-          v.id ===
-          x.vehicleId
+  ]
+    .map(
+      x => card(
+        x[0],
+        x[1]
       )
-    );
+    )
+    .join("");
 
-  const fuelCost =
-    fuelRows.reduce(
-      (s, x) =>
-        s + num(x.amount),
-      0
-    );
+  $("loanList").innerHTML =
+    loans
+      .map(x => {
 
-  const maintenanceCost =
-    maintenanceRows.reduce(
-      (s, x) =>
-        s + num(x.amount),
-      0
-    );
+        const paidLoan =
+          emi
+            .filter(
+              e =>
+                e["Loan ID"] === x.ID
+            )
+            .reduce(
+              (s, e) =>
+                s + num(e.Amount),
+              0
+            );
 
-  $("vehicleDash").innerHTML =
+        return item(
 
-    card(
-      "Vehicles",
-      vehicles.length
-    ) +
+          `
+            <b>
+              ${x["Loan Name"]}
+            </b>
 
-    card(
-      "Fuel Cost",
-      fuelCost
-    ) +
+            <br>
 
-    card(
-      "Maintenance Cost",
-      maintenanceCost
-    );
+            <small>
 
-  $("vehicleMaintenanceSummary").innerHTML =
-    vehicles.map(vehicle => {
+              Initial
+              ${money(x["Initial Amount"])}
 
-      const current =
-        num(
-          latestOdo(vehicle.id)
+              •
+
+              Paid
+              ${money(paidLoan)}
+
+              •
+
+              Balance
+              ${money(
+                Math.max(
+                  0,
+                  num(x["Initial Amount"]) -
+                  paidLoan
+                )
+              )}
+
+            </small>
+          `,
+
+          "",
+
+          `
+            <button
+              class="danger"
+              onclick="del('loans','${x.ID}')"
+            >
+              Delete
+            </button>
+          `
+
         );
 
-      const records =
-        db.maintenance
-          .filter(
-            x =>
-              x.vehicleId ===
-              vehicle.id
+      })
+      .join("") ||
+    "<p>No loans</p>";
+
+  chart(
+    "loanChart",
+    "doughnut",
+    [
+      "Initial Loan",
+      "EMI Paid"
+    ],
+    [
+      initial,
+      paid
+    ],
+    "Amount"
+  );
+
+}
+
+// =========================================================
+// GIVE & TAKE
+// =========================================================
+
+async function addGive() {
+
+  const person =
+    $("gtPerson").value.trim();
+
+  const amount =
+    num($("gtAmount").value);
+
+  if (
+    !person ||
+    amount <= 0
+  ) {
+    return toast(
+      "Enter person and amount"
+    );
+  }
+
+  await save(
+    "transactions",
+    {
+
+      ID:
+        uid(),
+
+      Person:
+        person,
+
+      Type:
+        $("gtType").value,
+
+      Amount:
+        amount,
+
+      Date:
+        $("gtDate").value ||
+        today(),
+
+      Purpose:
+        $("gtPurpose").value.trim(),
+
+      Notes:
+        $("gtNotes").value.trim(),
+
+      Revisions:
+        "[]"
+
+    }
+  );
+
+  [
+    "gtPerson",
+    "gtAmount",
+    "gtPurpose",
+    "gtNotes"
+  ].forEach(id => {
+
+    $(id).value = "";
+
+  });
+
+}
+
+function renderGiveTake() {
+
+  const balances =
+    Object.values(
+      giveBalances()
+    );
+
+  const receive =
+    balances
+      .filter(
+        x =>
+          x.balance > 0
+      )
+      .reduce(
+        (s, x) =>
+          s + x.balance,
+        0
+      );
+
+  const pay =
+    balances
+      .filter(
+        x =>
+          x.balance < 0
+      )
+      .reduce(
+        (s, x) =>
+          s +
+          Math.abs(
+            x.balance
+          ),
+        0
+      );
+
+  $("giveDash").innerHTML = [
+
+    [
+      "To Receive",
+      money(receive)
+    ],
+
+    [
+      "To Pay",
+      money(pay)
+    ],
+
+    [
+      "Net",
+      money(receive - pay)
+    ],
+
+    [
+      "People",
+      balances.length
+    ]
+
+  ]
+    .map(
+      x =>
+        card(
+          x[0],
+          x[1]
+        )
+    )
+    .join("");
+
+  $("gtDashboard").innerHTML =
+    balances
+      .map(x =>
+        card(
+          `
+            ${x.person}
+            •
+            ${
+              x.balance > 0
+                ? "To Receive"
+                : x.balance < 0
+                  ? "To Pay"
+                  : "Settled"
+            }
+          `,
+
+          money(
+            Math.abs(
+              x.balance
+            )
           )
-          .sort(
-            (a, b) =>
-              String(b.date)
-                .localeCompare(
-                  String(a.date)
-                )
+        )
+      )
+      .join("");
+
+  $("gtList").innerHTML =
+    arr("transactions")
+      .slice()
+      .sort(
+        (a, b) =>
+          String(b.Date)
+            .localeCompare(
+              String(a.Date)
+            )
+      )
+      .map(x =>
+        item(
+
+          `
+            <b>
+              ${x.Person}
+            </b>
+
+            •
+
+            ${x.Type}
+
+            <br>
+
+            <small>
+              ${x.Date || ""}
+              •
+              ${x.Purpose || ""}
+            </small>
+          `,
+
+          money(x.Amount),
+
+          `
+            <button
+              class="danger"
+              onclick="del('transactions','${x.ID}')"
+            >
+              Delete
+            </button>
+          `
+
+        )
+      )
+      .join("") ||
+    "<p>No records</p>";
+
+  chart(
+    "giveChart",
+    "bar",
+
+    balances.map(
+      x => x.person
+    ),
+
+    balances.map(
+      x =>
+        Math.abs(
+          x.balance
+        )
+    ),
+
+    "Outstanding"
+  );
+
+}
+
+// =========================================================
+// INVESTMENTS & SIP
+// =========================================================
+
+async function addBasket() {
+
+  const name =
+    $("sipPerson").value.trim();
+
+  const basket =
+    $("sipBasket").value.trim();
+
+  if (
+    !name ||
+    !basket
+  ) {
+    return toast(
+      "Enter person and basket"
+    );
+  }
+
+  let person =
+    arr("people").find(
+      x =>
+        String(x.Name)
+          .toLowerCase() ===
+        name.toLowerCase()
+    );
+
+  if (!person) {
+
+    person =
+      await save(
+        "people",
+        {
+          ID: uid(),
+          Name: name
+        }
+      );
+
+  }
+
+  await save(
+    "baskets",
+    {
+
+      ID:
+        uid(),
+
+      "Person ID":
+        person.ID,
+
+      "Basket Name":
+        basket
+
+    }
+  );
+
+  $("sipBasket").value = "";
+
+}
+
+async function addAsset() {
+
+  const basketId =
+    $("assetBasket").value;
+
+  const name =
+    $("assetName").value.trim();
+
+  const amount =
+    num(
+      $("assetAmount").value
+    );
+
+  if (
+    !basketId ||
+    !name ||
+    amount <= 0
+  ) {
+    return toast(
+      "Complete asset details"
+    );
+  }
+
+  await save(
+    "assets",
+    {
+
+      ID:
+        uid(),
+
+      "Basket ID":
+        basketId,
+
+      "Asset Name":
+        name,
+
+      "Asset Type":
+        $("assetType").value,
+
+      "Monthly Amount":
+        amount
+
+    }
+  );
+
+  $("assetName").value = "";
+
+  $("assetAmount").value = "";
+
+}
+
+async function markBasket(
+  id,
+  total
+) {
+
+  const already =
+    arr("sipPayments").some(
+      x =>
+        x["Basket ID"] === id &&
+        x.Month === ym()
+    );
+
+  if (already) {
+    return toast(
+      "This basket is already marked paid"
+    );
+  }
+
+  await save(
+    "sipPayments",
+    {
+
+      ID:
+        uid(),
+
+      "Basket ID":
+        id,
+
+      Month:
+        ym(),
+
+      Amount:
+        total,
+
+      "Paid At":
+        new Date()
+          .toISOString()
+
+    }
+  );
+
+}
+
+function renderInvestments() {
+
+  const baskets =
+    arr("baskets");
+
+  const people =
+    arr("people");
+
+  const assets =
+    arr("assets");
+
+  const payments =
+    arr("sipPayments");
+
+  const plan =
+    assets.reduce(
+      (s, x) =>
+        s +
+        num(
+          x["Monthly Amount"]
+        ),
+      0
+    );
+
+  const paid =
+    payments
+      .filter(
+        x =>
+          x.Month === ym()
+      )
+      .reduce(
+        (s, x) =>
+          s + num(x.Amount),
+        0
+      );
+
+  $("investmentDash").innerHTML = [
+
+    [
+      "Monthly Planned",
+      money(plan)
+    ],
+
+    [
+      "Paid This Month",
+      money(paid)
+    ],
+
+    [
+      "Pending",
+      money(
+        Math.max(
+          0,
+          plan - paid
+        )
+      )
+    ],
+
+    [
+      "Baskets",
+      baskets.length
+    ]
+
+  ]
+    .map(
+      x =>
+        card(
+          x[0],
+          x[1]
+        )
+    )
+    .join("");
+
+  $("basketList").innerHTML =
+    baskets
+      .map(b => {
+
+        const person =
+          people.find(
+            x =>
+              x.ID ===
+              b["Person ID"]
           );
 
-      const last =
-        records[0];
+        const basketAssets =
+          assets.filter(
+            x =>
+              x["Basket ID"] ===
+              b.ID
+          );
 
-      if (!last) {
+        const total =
+          basketAssets.reduce(
+            (s, x) =>
+              s +
+              num(
+                x["Monthly Amount"]
+              ),
+            0
+          );
+
+        const paidThisMonth =
+          payments.some(
+            x =>
+              x["Basket ID"] === b.ID &&
+              x.Month === ym()
+          );
 
         return `
-          <div class="maintenance-card">
+          <div class="box">
 
             <h3>
-              ${vehicle.name}
+              ${person?.Name || ""}
+              —
+              ${b["Basket Name"]}
             </h3>
 
-            <div class="muted">
-              Current KM:
-              ${current}
-            </div>
-
-          </div>
-        `;
-
-      }
-
-      const next =
-        num(last.odo) +
-        num(last.targetKm);
-
-      const remaining =
-        next - current;
-
-      let cls = "km-good";
-
-      if (remaining < 0) {
-        cls = "km-over";
-      } else if (remaining < 500) {
-        cls = "km-warn";
-      }
-
-      return `
-        <div class="maintenance-card">
-
-          <h3>
-            ${vehicle.name}
-          </h3>
-
-          <div class="maint-row">
-            <span>Current KM</span>
-            <b>${current} km</b>
-          </div>
-
-          <div class="maint-row">
-            <span>Last Service</span>
             <b>
-              ${last.category}
-              @ ${last.odo} km
+              ${money(total)}
+              / month
             </b>
-          </div>
 
-          <div class="maint-row">
-            <span>Next Target</span>
-            <b>${next} km</b>
-          </div>
+            ${basketAssets
+              .map(a => `
+                <div class="item">
 
-          <div class="maint-row">
-            <span>KM Remaining</span>
-            <b class="${cls}">
-              ${remaining} km
-            </b>
-          </div>
+                  <span>
 
-        </div>
-      `;
+                    <b>
+                      ${a["Asset Name"]}
+                    </b>
 
-    }).join("");
+                    <br>
 
-  const fuelData = {};
-  const maintenanceData = {};
+                    <small>
+                      ${a["Asset Type"]}
+                    </small>
 
-  vehicles.forEach(v => {
+                  </span>
 
-    fuelData[v.name] = 0;
+                  <span>
 
-    maintenanceData[v.name] = 0;
+                    ${money(
+                      a["Monthly Amount"]
+                    )}
 
-  });
+                    <button
+                      class="danger"
+                      onclick="del('assets','${a.ID}')"
+                    >
+                      Delete
+                    </button>
 
-  fuelRows.forEach(x => {
+                  </span>
 
-    const vehicle =
-      db.vehicles.find(
-        v => v.id === x.vehicleId
-      );
+                </div>
+              `)
+              .join("")
+            }
 
-    if (vehicle) {
+            <div
+              style="margin-top:10px"
+            >
 
-      fuelData[vehicle.name] +=
-        num(x.amount);
-
-    }
-
-  });
-
-  maintenanceRows.forEach(x => {
-
-    const vehicle =
-      db.vehicles.find(
-        v => v.id === x.vehicleId
-      );
-
-    if (vehicle) {
-
-      maintenanceData[vehicle.name] +=
-        num(x.amount);
-
-    }
-
-  });
-
-  makeChart(
-    "fuelChart",
-    "bar",
-    Object.keys(fuelData),
-    [
-      {
-        label: "Fuel Cost",
-        data:
-          Object.values(fuelData)
-      }
-    ]
-  );
-
-  makeChart(
-    "maintenanceChart",
-    "bar",
-    Object.keys(maintenanceData),
-    [
-      {
-        label: "Maintenance Cost",
-        data:
-          Object.values(
-            maintenanceData
-          )
-      }
-    ]
-  );
-
-  $("fuelList").innerHTML =
-    fuelRows
-      .sort(
-        (a, b) =>
-          String(b.date)
-            .localeCompare(
-              String(a.date)
-            )
-      )
-      .map(x => {
-
-        const vehicle =
-          db.vehicles.find(
-            v =>
-              v.id ===
-              x.vehicleId
-          );
-
-        return `
-          <div class="item">
-
-            <div>
-              <b>
-                ${vehicle?.name || ""}
-              </b>
-
-              <div class="muted">
-                ${x.date}
-                • ${x.odo} km
-                • ${x.qty} L
-              </div>
-            </div>
-
-            <div>
-
-              <b>
-                ${money(x.amount)}
-              </b>
+              ${
+                paidThisMonth
+                  ? "✓ PAID THIS MONTH"
+                  : `
+                    <button
+                      onclick="markBasket('${b.ID}',${total})"
+                    >
+                      Mark Paid
+                    </button>
+                  `
+              }
 
               <button
                 class="danger"
-                onclick="removeItem('fuel','${x.id}')"
+                onclick="deleteBasket('${b.ID}')"
               >
-                Delete
+                Delete Basket
               </button>
 
             </div>
@@ -1962,140 +3433,233 @@ function renderVehicles() {
           </div>
         `;
 
-      }).join("");
+      })
+      .join("") ||
+    "<p>No baskets</p>";
 
-  $("maintenanceList").innerHTML =
-    maintenanceRows
-      .sort(
-        (a, b) =>
-          String(b.date)
-            .localeCompare(
-              String(a.date)
-            )
-      )
-      .map(x => {
+  const byType = {};
 
-        const vehicle =
-          db.vehicles.find(
-            v =>
-              v.id ===
-              x.vehicleId
-          );
+  assets.forEach(a => {
 
-        return `
-          <div class="item">
+    const type =
+      a["Asset Type"] ||
+      "Other";
 
-            <div>
+    byType[type] =
+      (byType[type] || 0) +
+      num(
+        a["Monthly Amount"]
+      );
 
-              <b>
-                ${vehicle?.name || ""}
-                • ${x.category}
-              </b>
+  });
 
-              <div class="muted">
-
-                ${x.date}
-
-                • ${x.odo} km
-
-                ${x.targetKm
-                  ? " • Next after " +
-                    x.targetKm +
-                    " km"
-                  : ""
-                }
-
-              </div>
-
-            </div>
-
-            <div>
-
-              <b>
-                ${money(x.amount)}
-              </b>
-
-              <button
-                class="danger"
-                onclick="removeItem('maintenance','${x.id}')"
-              >
-                Delete
-              </button>
-
-            </div>
-
-          </div>
-        `;
-
-      }).join("");
+  chart(
+    "investmentChart",
+    "doughnut",
+    Object.keys(byType),
+    Object.values(byType),
+    "Monthly SIP"
+  );
 
 }
 
-function resetVehicleFilters() {
+async function deleteBasket(id) {
 
-  $("vehicleTypeFilter").value = "";
+  if (
+    !confirm(
+      "Delete this basket and its assets?"
+    )
+  ) {
+    return;
+  }
 
-  $("vehicleFilter").value = "";
+  const assets =
+    arr("assets").filter(
+      x =>
+        x["Basket ID"] === id
+    );
 
-  renderVehicles();
+  for (
+    const asset of assets
+  ) {
+
+    await api(
+      "delete",
+      {
+        table: "assets",
+        id: asset.ID
+      }
+    );
+
+  }
+
+  const payments =
+    arr("sipPayments").filter(
+      x =>
+        x["Basket ID"] === id
+    );
+
+  for (
+    const payment of payments
+  ) {
+
+    await api(
+      "delete",
+      {
+        table: "sipPayments",
+        id: payment.ID
+      }
+    );
+
+  }
+
+  await api(
+    "delete",
+    {
+      table: "baskets",
+      id
+    }
+  );
+
+  DB.assets =
+    arr("assets").filter(
+      x =>
+        x["Basket ID"] !== id
+    );
+
+  DB.sipPayments =
+    arr("sipPayments").filter(
+      x =>
+        x["Basket ID"] !== id
+    );
+
+  DB.baskets =
+    arr("baskets").filter(
+      x =>
+        x.ID !== id
+    );
+
+  persist();
+
+  render();
+
+  toast(
+    "Basket deleted"
+  );
+
+}
+// =========================================================
+// MONEY SPLITTER
+// =========================================================
+
+function members(group) {
+
+  try {
+
+    return JSON.parse(
+      group["Members JSON"] ||
+      "[]"
+    );
+
+  } catch (e) {
+
+    return [];
+
+  }
 
 }
 
-/* =========================================================
-   MONEY SPLITTER - BASIC
-========================================================= */
+function jsonValue(
+  value,
+  fallback
+) {
 
-function addGroup() {
+  try {
+
+    return JSON.parse(
+      value || ""
+    );
+
+  } catch (e) {
+
+    return fallback;
+
+  }
+
+}
+
+async function addGroup() {
 
   const name =
     $("spGroup").value.trim();
 
-  const members =
+  const groupMembers =
     $("spMembers").value
       .split(",")
-      .map(x => x.trim())
+      .map(
+        x => x.trim()
+      )
       .filter(Boolean);
 
   if (
     !name ||
-    members.length === 0
+    groupMembers.length < 2
   ) {
-
-    toast(
-      "Enter group and members"
+    return toast(
+      "Enter group and minimum 2 members"
     );
-
-    return;
-
   }
 
-  db.splitGroups.push({
+  const record =
+    await save(
+      "splitGroups",
+      {
 
-    id: uid(),
+        ID:
+          uid(),
 
-    name,
+        "Group Name":
+          name,
 
-    category:
-      $("spCat").value,
+        Category:
+          $("spCat").value,
 
-    members
+        "Members JSON":
+          JSON.stringify(
+            [
+              ...new Set(
+                groupMembers
+              )
+            ]
+          )
 
-  });
+      }
+    );
 
   $("spGroup").value = "";
 
   $("spMembers").value = "";
 
-  saveAll();
+  if ($("spGroupSel")) {
+    $("spGroupSel").value =
+      record.ID;
+  }
+
+  if ($("spGroupExpense")) {
+    $("spGroupExpense").value =
+      record.ID;
+  }
+
+  render();
 
 }
 
-function addMember() {
+async function addMember() {
 
   const group =
-    db.splitGroups.find(
+    arr("splitGroups").find(
       x =>
-        x.id ===
+        x.ID ===
         $("spGroupSel").value
     );
 
@@ -2105,30 +3669,50 @@ function addMember() {
   if (
     !group ||
     !member
-  ) return;
+  ) {
+    return toast(
+      "Select group and enter member"
+    );
+  }
+
+  const list =
+    members(group);
 
   if (
-    !group.members.includes(
-      member
-    )
+    list.includes(member)
   ) {
-
-    group.members.push(member);
-
+    return toast(
+      "Member already exists"
+    );
   }
+
+  await save(
+    "splitGroups",
+    {
+
+      ...group,
+
+      "Members JSON":
+        JSON.stringify(
+          [
+            ...list,
+            member
+          ]
+        )
+
+    }
+  );
 
   $("newMember").value = "";
 
-  saveAll();
-
 }
 
-function renameGroup() {
+async function renameGroup() {
 
   const group =
-    db.splitGroups.find(
+    arr("splitGroups").find(
       x =>
-        x.id ===
+        x.ID ===
         $("spGroupSel").value
     );
 
@@ -2137,152 +3721,403 @@ function renameGroup() {
   const name =
     prompt(
       "New group name",
-      group.name
+      group["Group Name"]
     );
 
-  if (name) {
+  if (!name?.trim()) return;
 
-    group.name =
-      name.trim();
+  await save(
+    "splitGroups",
+    {
 
-    saveAll();
+      ...group,
 
-  }
+      "Group Name":
+        name.trim()
 
-}
-
-function updateSplitGroup() {
-
-  const group =
-    db.splitGroups.find(
-      x =>
-        x.id ===
-        $("spGroupSel").value
-    );
-
-  if (!group) {
-
-    $("memberChips").innerHTML = "";
-
-    return;
-
-  }
-
-  $("memberChips").innerHTML =
-    group.members
-      .map(member => `
-        <div class="chip">
-          ${member}
-        </div>
-      `)
-      .join("");
-
-  $("spPaidBy").innerHTML =
-    group.members
-      .map(member =>
-        `<option>${member}</option>`
-      )
-      .join("");
-
-  $("spMembersSel").value =
-    group.members.join(", ");
-
-  renderSplitPage();
+    }
+  );
 
 }
 
 function renderCustomShares() {
+
+  const container =
+    $("customShares");
+
+  if (!container) return;
 
   if (
     $("spSplitType").value !==
     "custom"
   ) {
 
-    $("customShares").innerHTML =
-      "";
+    container.innerHTML = "";
 
     return;
 
   }
 
   const group =
-    db.splitGroups.find(
+    arr("splitGroups").find(
       x =>
-        x.id ===
+        x.ID ===
         $("spGroupExpense").value
     );
 
   if (!group) return;
 
-  $("customShares").innerHTML =
-    group.members
-      .map(member => `
-        <div class="share">
+  let participants =
+    $("spMembersSel").value
+      .split(",")
+      .map(
+        x => x.trim()
+      )
+      .filter(Boolean);
 
-          <span>
-            ${member}
-          </span>
+  if (!participants.length) {
 
-          <input
-            type="number"
-            class="customShare"
-            data-member="${member}"
-            placeholder="Amount"
-          >
+    participants =
+      members(group);
 
-        </div>
-      `)
+  }
+
+  container.innerHTML =
+    participants
+      .map(
+        name => `
+          <div class="share">
+
+            <span>
+              ${name}
+            </span>
+
+            <input
+              class="customShare"
+              data-member="${name}"
+              type="number"
+              placeholder="Amount"
+            >
+
+          </div>
+        `
+      )
       .join("");
 
 }
 
-function saveSplitExpense() {
+function calculateGroup(group) {
 
-  const groupId =
-    $("spGroupExpense").value;
+  const groupMembers =
+    members(group);
 
-  const group =
-    db.splitGroups.find(
-      x => x.id === groupId
-    );
+  const stats = {};
 
-  const amount =
-    num($("spAmount").value);
+  groupMembers.forEach(name => {
 
-  if (
-    !group ||
-    amount <= 0
+    stats[name] = {
+
+      name,
+
+      paid: 0,
+
+      share: 0,
+
+      settledOut: 0,
+
+      settledIn: 0,
+
+      net: 0
+
+    };
+
+  });
+
+  const expenses =
+    arr("splitExpenses")
+      .filter(
+        x =>
+          x["Group ID"] ===
+          group.ID
+      );
+
+  expenses.forEach(expense => {
+
+    const amount =
+      num(expense.Amount);
+
+    const payer =
+      expense["Paid By"];
+
+    if (!stats[payer]) {
+
+      stats[payer] = {
+
+        name: payer,
+
+        paid: 0,
+
+        share: 0,
+
+        settledOut: 0,
+
+        settledIn: 0,
+
+        net: 0
+
+      };
+
+    }
+
+    stats[payer].paid +=
+      amount;
+
+    let participants =
+      jsonValue(
+        expense["Members JSON"],
+        []
+      );
+
+    if (!participants.length) {
+
+      participants =
+        groupMembers;
+
+    }
+
+    const custom =
+      jsonValue(
+        expense[
+          "Custom Shares JSON"
+        ],
+        null
+      );
+
+    participants.forEach(name => {
+
+      if (!stats[name]) {
+
+        stats[name] = {
+
+          name,
+
+          paid: 0,
+
+          share: 0,
+
+          settledOut: 0,
+
+          settledIn: 0,
+
+          net: 0
+
+        };
+
+      }
+
+      stats[name].share +=
+        custom
+          ? num(custom[name])
+          : (
+              participants.length
+                ? amount /
+                  participants.length
+                : 0
+            );
+
+    });
+
+  });
+
+  arr("splitSettlements")
+    .filter(
+      x =>
+        x["Group ID"] ===
+        group.ID
+    )
+    .forEach(s => {
+
+      if (stats[s.From]) {
+
+        stats[s.From]
+          .settledOut +=
+          num(s.Amount);
+
+      }
+
+      if (stats[s.To]) {
+
+        stats[s.To]
+          .settledIn +=
+          num(s.Amount);
+
+      }
+
+    });
+
+  Object
+    .values(stats)
+    .forEach(x => {
+
+      x.net =
+        x.paid -
+        x.share +
+        x.settledOut -
+        x.settledIn;
+
+    });
+
+  return {
+
+    expenses,
+
+    stats:
+      Object.values(stats),
+
+    total:
+      expenses.reduce(
+        (s, x) =>
+          s + num(x.Amount),
+        0
+      )
+
+  };
+
+}
+
+function settlements(stats) {
+
+  const creditors =
+    stats
+      .filter(
+        x =>
+          x.net > 0.01
+      )
+      .map(
+        x => ({
+          name: x.name,
+          amount: x.net
+        })
+      );
+
+  const debtors =
+    stats
+      .filter(
+        x =>
+          x.net < -0.01
+      )
+      .map(
+        x => ({
+          name: x.name,
+          amount: -x.net
+        })
+      );
+
+  const result = [];
+
+  let i = 0;
+
+  let j = 0;
+
+  while (
+    i < debtors.length &&
+    j < creditors.length
   ) {
 
-    toast("Complete expense");
+    const amount =
+      Math.min(
+        debtors[i].amount,
+        creditors[j].amount
+      );
 
-    return;
+    result.push({
+
+      from:
+        debtors[i].name,
+
+      to:
+        creditors[j].name,
+
+      amount
+
+    });
+
+    debtors[i].amount -=
+      amount;
+
+    creditors[j].amount -=
+      amount;
+
+    if (
+      debtors[i].amount < 0.01
+    ) {
+      i++;
+    }
+
+    if (
+      creditors[j].amount < 0.01
+    ) {
+      j++;
+    }
 
   }
 
-  const participants =
+  return result;
+
+}
+
+async function saveSplitExpense() {
+
+  const group =
+    arr("splitGroups").find(
+      x =>
+        x.ID ===
+        $("spGroupExpense").value
+    );
+
+  const amount =
+    num(
+      $("spAmount").value
+    );
+
+  const payer =
+    $("spPaidBy").value;
+
+  if (
+    !group ||
+    amount <= 0 ||
+    !payer
+  ) {
+
+    return toast(
+      "Select group, payer and amount"
+    );
+
+  }
+
+  let participants =
     $("spMembersSel").value
       .split(",")
-      .map(x => x.trim())
+      .map(
+        x => x.trim()
+      )
       .filter(Boolean);
 
-  let shares = {};
+  if (!participants.length) {
+
+    participants =
+      members(group);
+
+  }
+
+  let customShares = "";
 
   if (
     $("spSplitType").value ===
-    "equal"
+    "custom"
   ) {
 
-    const share =
-      amount /
-      participants.length;
-
-    participants.forEach(
-      member =>
-        shares[member] = share
-    );
-
-  } else {
+    const custom = {};
 
     document
       .querySelectorAll(
@@ -2290,42 +4125,153 @@ function saveSplitExpense() {
       )
       .forEach(input => {
 
-        shares[
+        custom[
           input.dataset.member
         ] =
-          num(input.value);
+          num(
+            input.value
+          );
+
+      });
+
+    const total =
+      Object
+        .values(custom)
+        .reduce(
+          (s, x) =>
+            s + num(x),
+          0
+        );
+
+    if (
+      Math.abs(
+        total - amount
+      ) > 0.01
+    ) {
+
+      return toast(
+        "Custom shares total must equal expense amount"
+      );
+
+    }
+
+    customShares =
+      JSON.stringify(
+        custom
+      );
+
+  }
+
+  await save(
+    "splitExpenses",
+    {
+
+      ID:
+        $("splitEditId").value ||
+        uid(),
+
+      "Group ID":
+        group.ID,
+
+      Title:
+        $("spTitle").value.trim() ||
+        "Expense",
+
+      Amount:
+        amount,
+
+      "Paid By":
+        payer,
+
+      "Members JSON":
+        JSON.stringify(
+          participants
+        ),
+
+      "Custom Shares JSON":
+        customShares,
+
+      Date:
+        $("spDate").value ||
+        today()
+
+    }
+  );
+
+  clearSplit();
+
+}
+
+function editExpense(id) {
+
+  const expense =
+    arr("splitExpenses").find(
+      x =>
+        x.ID === id
+    );
+
+  if (!expense) return;
+
+  $("splitEditId").value =
+    expense.ID;
+
+  $("spGroupExpense").value =
+    expense["Group ID"];
+
+  $("spGroupSel").value =
+    expense["Group ID"];
+
+  $("spTitle").value =
+    expense.Title;
+
+  $("spAmount").value =
+    expense.Amount;
+
+  $("spPaidBy").value =
+    expense["Paid By"];
+
+  $("spDate").value =
+    expense.Date;
+
+  $("spMembersSel").value =
+    jsonValue(
+      expense["Members JSON"],
+      []
+    ).join(", ");
+
+  const custom =
+    jsonValue(
+      expense[
+        "Custom Shares JSON"
+      ],
+      null
+    );
+
+  $("spSplitType").value =
+    custom
+      ? "custom"
+      : "equal";
+
+  renderCustomShares();
+
+  if (custom) {
+
+    document
+      .querySelectorAll(
+        ".customShare"
+      )
+      .forEach(input => {
+
+        input.value =
+          num(
+            custom[
+              input.dataset.member
+            ]
+          );
 
       });
 
   }
-
-  db.splitExpenses.push({
-
-    id: uid(),
-
-    groupId,
-
-    title:
-      $("spTitle").value.trim(),
-
-    amount,
-
-    paidBy:
-      $("spPaidBy").value,
-
-    date:
-      $("spDate").value ||
-      today(),
-
-    shares
-
-  });
-
-  clearSplit();
-
-  saveAll();
-
-  toast("Expense saved");
 
 }
 
@@ -2337,312 +4283,60 @@ function clearSplit() {
 
   $("spAmount").value = "";
 
+  $("spMembersSel").value = "";
+
+  $("spDate").value =
+    today();
+
+  $("spSplitType").value =
+    "equal";
+
   $("customShares").innerHTML =
     "";
 
 }
 
-function renderSplitPage() {
+async function settleNow(
+  groupId,
+  from,
+  to,
+  amount
+) {
 
-  const groupId =
-    $("spGroupSel").value;
-
-  if (!groupId) {
-
-    $("splitSummary").innerHTML =
-      "";
-
-    $("splitExpenseList").innerHTML =
-      "";
-
+  if (
+    !confirm(
+      `${from} paid ${money(amount)} to ${to}?`
+    )
+  ) {
     return;
-
   }
 
-  const group =
-    db.splitGroups.find(
-      x => x.id === groupId
-    );
+  await save(
+    "splitSettlements",
+    {
 
-  if (!group) return;
+      ID:
+        uid(),
 
-  const balances = {};
+      "Group ID":
+        groupId,
 
-  group.members.forEach(
-    member =>
-      balances[member] = 0
+      From:
+        from,
+
+      To:
+        to,
+
+      Amount:
+        amount,
+
+      Date:
+        today(),
+
+      Notes:
+        "Settlement"
+
+    }
   );
-
-  const expenses =
-    db.splitExpenses.filter(
-      x =>
-        x.groupId ===
-        groupId
-    );
-
-  expenses.forEach(expense => {
-
-    balances[
-      expense.paidBy
-    ] +=
-      num(expense.amount);
-
-    Object.entries(
-      expense.shares
-    ).forEach(
-      ([member, value]) => {
-
-        balances[member] -=
-          num(value);
-
-      }
-    );
-
-  });
-
-  $("splitSummary").innerHTML =
-    Object.entries(balances)
-      .map(
-        ([member, balance]) =>
-          card(
-            member,
-            Math.abs(balance)
-          )
-      )
-      .join("");
-
-  $("splitExpenseList").innerHTML =
-    expenses.map(x => `
-      <div class="item">
-
-        <div>
-
-          <b>
-            ${x.title}
-          </b>
-
-          <div class="muted">
-
-            ${x.date}
-
-            • Paid by
-            ${x.paidBy}
-
-          </div>
-
-        </div>
-
-        <div>
-
-          <b>
-            ${money(x.amount)}
-          </b>
-
-          <button
-            class="danger"
-            onclick="removeItem('splitExpenses','${x.id}')"
-          >
-            Delete
-          </button>
-
-        </div>
-
-      </div>
-    `).join("");
-
-}
-
-/* =========================================================
-   LISTS
-========================================================= */
-
-function populateAllLists() {
-
-  const categories =
-    [
-      ...new Set(
-        db.passbook
-          .map(x => x.category)
-          .filter(Boolean)
-      )
-    ];
-
-  const accounts =
-    [
-      ...new Set(
-        db.passbook
-          .map(x => x.account)
-          .filter(Boolean)
-      )
-    ];
-
-  const remarks =
-    [
-      ...new Set(
-        db.passbook
-          .map(x => x.remarks)
-          .filter(Boolean)
-      )
-    ];
-
-  fillDatalist(
-    "categoryList",
-    categories
-  );
-
-  fillDatalist(
-    "accountList",
-    accounts
-  );
-
-  fillDatalist(
-    "remarksList",
-    remarks
-  );
-
-  $("dashCategory").innerHTML =
-    `<option value="">
-      All Categories
-    </option>` +
-    categories.map(
-      x =>
-        `<option>${x}</option>`
-    ).join("");
-
-  $("pbFilterCategory").innerHTML =
-    `<option value="">
-      All Categories
-    </option>` +
-    categories.map(
-      x =>
-        `<option>${x}</option>`
-    ).join("");
-
-  $("emiLoan").innerHTML =
-    `<option value="">
-      Select Loan
-    </option>` +
-    db.loans.map(
-      x =>
-        `<option value="${x.id}">
-          ${x.name}
-        </option>`
-    ).join("");
-
-  $("assetBasket").innerHTML =
-    `<option value="">
-      Select Basket
-    </option>` +
-    db.baskets.map(
-      x =>
-        `<option value="${x.id}">
-          ${x.name}
-        </option>`
-    ).join("");
-
-  ["fuelVehicle", "maintVehicle"]
-    .forEach(id => {
-
-      $(id).innerHTML =
-        `<option value="">
-          Select Vehicle
-        </option>` +
-        db.vehicles.map(
-          x =>
-            `<option value="${x.id}">
-              ${x.name}
-            </option>`
-        ).join("");
-
-    });
-
-  $("spGroupSel").innerHTML =
-    `<option value="">
-      Select Group
-    </option>` +
-    db.splitGroups.map(
-      x =>
-        `<option value="${x.id}">
-          ${x.name}
-        </option>`
-    ).join("");
-
-  $("spGroupExpense").innerHTML =
-    `<option value="">
-      Select Group
-    </option>` +
-    db.splitGroups.map(
-      x =>
-        `<option value="${x.id}">
-          ${x.name}
-        </option>`
-    ).join("");
-
-  populateVehicleFilters();
-
-}
-
-function fillDatalist(id, values) {
-
-  const el = $(id);
-
-  if (!el) return;
-
-  el.innerHTML =
-    values
-      .map(
-        x =>
-          `<option value="${x}"></option>`
-      )
-      .join("");
-
-}
-
-function populateVehicleFilters() {
-
-  const type =
-    $("vehicleTypeFilter").value;
-
-  const vehicles =
-    db.vehicles.filter(
-      x =>
-        !type ||
-        x.type === type
-    );
-
-  $("vehicleFilter").innerHTML =
-    `<option value="">
-      All Vehicles
-    </option>` +
-    vehicles.map(
-      x =>
-        `<option value="${x.id}">
-          ${x.name}
-        </option>`
-    ).join("");
-
-}
-
-/* =========================================================
-   RENDER ALL
-========================================================= */
-
-function renderAll() {
-
-  renderDashboard();
-
-  renderPassbook();
-
-  renderSalary();
-
-  renderLoans();
-
-  renderGiveTake();
-
-  renderInvestments();
-
-  renderVehicles();
-
-  renderSplitPage();
 
 }
