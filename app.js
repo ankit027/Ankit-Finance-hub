@@ -3,7 +3,7 @@
   Paste your deployed Google Apps Script Web App URL below.
   Example: https://script.google.com/macros/s/XXXXX/exec
 */
-const API_URL = "https://script.google.com/macros/s/AKfycbwYIXL6HtbCW6QiSediymQGV_zySDfcd0f-f61zJ2ihqeIFJ4h1C_Ge6T_zlaVWw3-M/exec";
+const API_URL ="https://script.google.com/macros/s/AKfycbwYIXL6HtbCW6QiSediymQGV_zySDfcd0f-f61zJ2ihqeIFJ4h1C_Ge6T_zlaVWw3-M/exec";
 
 let DB = {}, charts = {};
 
