@@ -3,6 +3,7 @@ const KEY = "ankit_finance_hub_final_v3";
 
 let DB = {};
 let charts = {};
+let passbookEditId = "";
 
 window.addEventListener("unhandledrejection", e => {
   console.error(e.reason);
@@ -681,89 +682,50 @@ function dash() {
    PASSBOOK
 ===================================================== */
 
-function passbook() {
+  function passbook() {
+  const f = pbFilter();
 
-  const filter = pbFilter();
+  const p = filterPassbook(
+    DB.passbook || [],
+    f.month,
+    f.category
+  );
 
-  const rows =
-    filterPassbook(
-      DB.passbook || [],
-      filter.month,
-      filter.category
-    );
+  const income = p
+    .filter(x => String(x.Type || "").toLowerCase() === "income")
+    .reduce((a, x) => a + n(x.Amount), 0);
 
-
-  const income =
-    rows
-      .filter(
-        x =>
-          String(x.Type || "")
-            .toLowerCase() === "income"
-      )
-      .reduce(
-        (sum, x) =>
-          sum + n(x.Amount),
-        0
-      );
-
-
-  const expense =
-    rows
-      .filter(
-        x =>
-          String(x.Type || "")
-            .toLowerCase() === "expense"
-      )
-      .reduce(
-        (sum, x) =>
-          sum + n(x.Amount),
-        0
-      );
-
+  const expense = p
+    .filter(x => String(x.Type || "").toLowerCase() === "expense")
+    .reduce((a, x) => a + n(x.Amount), 0);
 
   $("passbookDash").innerHTML = [
-
     ["Income", m(income)],
-
     ["Expense", m(expense)],
-
     ["Net", m(income - expense)],
-
-    ["Entries", rows.length]
-
-  ]
-    .map(x => card(...x))
-    .join("");
-
+    ["Entries", p.length]
+  ].map(x => card(...x)).join("");
 
   $("pbList").innerHTML =
-    rows
-      .slice()
-      .reverse()
-      .map(x =>
-        item(
-          `
-          ${x.Date}
-          • <b>${x.Category}</b>
-          • ${x.Type}
-          `,
-          m(x.Amount),
-          `
-          <button
-            class="danger"
-            onclick="del('passbook','${x.ID}')"
-          >
-            Delete
-          </button>
-          `
-        )
+    p.slice()
+      .sort((a, b) =>
+        String(b.Date || "").localeCompare(String(a.Date || ""))
       )
-      .join("")
-    ||
+      .map(x => item(
+        `${x.Date || ""} • <b>${x.Category || ""}</b> • ${x.Type || ""}`,
+        m(x.Amount),
+        `
+        <button class="secondary" onclick="editPassbook('${x.ID}')">
+          ✏️ Edit
+        </button>
+        <button class="danger" onclick="del('passbook','${x.ID}')">
+          Delete
+        </button>
+        `
+      ))
+      .join("") ||
     "<p>No records for selected filter</p>";
 }
-
-
 /* =====================================================
    SALARY
 ===================================================== */
@@ -3441,42 +3403,91 @@ function draw() {
 /* =====================================================
    ADD PASSBOOK
 ===================================================== */
-
 function addPassbook() {
 
-  return save(
-    "passbook",
-    {
+  const amount = n($("pbAmt").value);
 
-      ID:
-        uid(),
+  if (amount <= 0) {
+    return toast("Enter valid amount");
+  }
 
-      Date:
-        $("pbDate").value ||
-        today(),
+  const record = {
+    ID: passbookEditId || uid(),
+    Date: $("pbDate").value || today(),
+    Type: $("pbType").value,
+    Category: $("pbCat").value.trim(),
+    Amount: amount,
+    Account: $("pbAccount").value.trim(),
+    Remarks: $("pbRemarks").value.trim()
+  };
 
-      Type:
-        $("pbType").value,
+  save("passbook", record).then(() => {
 
-      Category:
-        $("pbCat").value,
+    toast(
+      passbookEditId
+        ? "✓ Passbook entry updated"
+        : "✓ Passbook entry saved"
+    );
 
-      Amount:
-        n(
-          $("pbAmt").value
-        ),
-
-      Account:
-        $("pbAccount").value,
-
-      Remarks:
-        $("pbRemarks").value
-
-    }
-  );
+    clearPassbookForm();
+  });
 }
 
 
+function editPassbook(id) {
+
+  const entry = (DB.passbook || [])
+    .find(x => String(x.ID) === String(id));
+
+  if (!entry) {
+    return toast("Passbook entry not found");
+  }
+
+  passbookEditId = entry.ID;
+
+  $("pbDate").value = entry.Date || today();
+  $("pbType").value = entry.Type || "Expense";
+  $("pbCat").value = entry.Category || "";
+  $("pbAmt").value = entry.Amount || "";
+  $("pbAccount").value = entry.Account || "";
+  $("pbRemarks").value = entry.Remarks || "";
+
+  const saveButton = document.querySelector(
+    '#passbook button[onclick="addPassbook()"]'
+  );
+
+  if (saveButton) {
+    saveButton.textContent = "💾 Update Entry";
+  }
+
+  $("pbDate").scrollIntoView({
+    behavior: "smooth",
+    block: "center"
+  });
+
+  toast("✏️ Editing passbook entry");
+}
+
+
+function clearPassbookForm() {
+
+  passbookEditId = "";
+
+  $("pbDate").value = today();
+  $("pbType").value = "Expense";
+  $("pbCat").value = "";
+  $("pbAmt").value = "";
+  $("pbAccount").value = "";
+  $("pbRemarks").value = "";
+
+  const saveButton = document.querySelector(
+    '#passbook button[onclick="addPassbook()"]'
+  );
+
+  if (saveButton) {
+    saveButton.textContent = "Save";
+  }
+}
 /* =====================================================
    ADD SALARY
 ===================================================== */
