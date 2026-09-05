@@ -264,46 +264,465 @@ function renderInvestments(){
 async function addBasket(){const person=val("sipPerson"), name=val("sipBasket");if(!name)return toast("Basket name required");try{let p=(DB.people||[]).find(x=>String(x.Name).toLowerCase()===person.toLowerCase());if(person&&!p)p=await save("people",{Name:person});await save("baskets",{"Person ID":p?.ID||"", "Basket Name":name});$("sipBasket").value="";renderAll();toast("Basket created");}catch(e){toast(e.message)}}
 async function addAsset(){if(!val("assetBasket")||!val("assetName")||!num(val("assetAmount")))return toast("Select basket, asset and amount");try{await save("assets",{"Basket ID":val("assetBasket"),"Asset Name":val("assetName"),"Asset Type":val("assetType"),"Monthly Amount":num(val("assetAmount"))});["assetName","assetAmount"].forEach(id=>$(id).value="");renderAll();toast("Asset saved");}catch(e){toast(e.message)}}
 
-function renderVehicles(){
-  const vehicles=DB.vehicles||[], type=val("vehicleTypeFilter"), vid=val("vehicleFilter");
-  opt($("vehicleFilter"),vehicles.filter(v=>!type||v["Vehicle Type"]===type),v=>v["Vehicle Name"],v=>v.ID,"All Vehicles");
-  ["fuelVehicle","maintVehicle"].forEach(id=>opt($(id),vehicles,v=>v["Vehicle Name"],v=>v.ID,"Select vehicle"));
-  const fuels=(DB.fuel||[]).filter(x=>!vid||String(x["Vehicle ID"])===String(vid));
-  const maint=(DB.maintenance||[]).filter(x=>!vid||String(x["Vehicle ID"])===String(vid));
-  const fcost=fuels.reduce((s,x)=>s+num(x.Amount),0), mcost=maint.reduce((s,x)=>s+num(x.Amount),0);
-  $("vehicleDash").innerHTML=card("Fuel Cost",fmt(fcost))+card("Maintenance Cost",fmt(mcost))+card("Total Cost",fmt(fcost+mcost));
-  $("fuelList").innerHTML=fuels.sort((a,b)=>String(b.Date).localeCompare(String(a.Date))).map(x=>`<div class="item"><div><b>${vehicleName(x["Vehicle ID"])}</b><br><small>${x.Date} • ${x.Odometer} km • ${x.Quantity} L</small></div><div><b>${fmt(x.Amount)}</b><br><button class="danger" onclick="del('fuel','${x.ID}')">Delete</button></div></div>`).join("")||"<p class='muted'>No fuel entries</p>";
-  $("maintenanceList").innerHTML=maint.sort((a,b)=>String(b.Date).localeCompare(String(a.Date))).map(x=>`<div class="item"><div><b>${vehicleName(x["Vehicle ID"])} • ${esc(x.Category)}</b><br><small>${x.Date} • ${x.Odometer||""} km • ${esc(x.Remarks||"")}</small></div><div><b>${fmt(x.Amount)}</b><br><button class="danger" onclick="del('maintenance','${x.ID}')">Delete</button></div></div>`).join("")||"<p class='muted'>No maintenance entries</p>";
-  $("vehicleMaintenanceSummary").innerHTML=vehicles.filter(v=>!vid||String(v.ID)===String(vid)).map(v=>{const latest=[...maint].filter(x=>String(x["Vehicle ID"])===String(v.ID)).sort((a,b)=>String(b.Date).localeCompare(String(a.Date)))[0];const latestFuel=[...fuels].filter(x=>String(x["Vehicle ID"])===String(v.ID)).sort((a,b)=>num(b.Odometer)-num(a.Odometer))[0];if(!latest)return `<div class="maintenance-card"><h3>${esc(v["Vehicle Name"])}</h3><p class="muted">No maintenance record</p></div>`;const current=num(latestFuel?.Odometer||latest.Odometer), target=num(latest.Odometer)+num(latest["Next Target KM"]);return `<div class="maintenance-card"><h3>${esc(v["Vehicle Name"])}</h3><div class="maint-row"><span>Current KM</span><b>${current}</b></div><div class="maint-row"><span>${esc(latest.Category)}</span><b>Next at ${target||"—"} km</b></div></div>`}).join("");
-  const labels=vehicles.map(v=>v["Vehicle Name"]);
-  chart("fuelChart","bar",{labels,datasets:[{label:"Fuel Cost",data:vehicles.map(v=>(DB.fuel||[]).filter(x=>String(x["Vehicle ID"])===String(v.ID)).reduce((s,x)=>s+num(x.Amount),0))}]});
-  chart("maintenanceChart","bar",{labels,datasets:[{label:"Maintenance Cost",data:vehicles.map(v=>(DB.maintenance||[]).filter(x=>String(x["Vehicle ID"])===String(v.ID)).reduce((s,x)=>s+num(x.Amount),0))}]});
-}
-function vehicleName(id){return (DB.vehicles||[]).find(v=>String(v.ID)===String(id))?.["Vehicle Name"]||"Vehicle";}
-async function addVehicle(){if(!val("vehicleName"))return toast("Vehicle name required");try{await save("vehicles",{"Vehicle Name":val("vehicleName"),"Vehicle Type":val("vehicleType"),"Number Plate":val("vehiclePlate")});["vehicleName","vehiclePlate"].forEach(id=>$(id).value="");renderAll();toast("Vehicle added");}catch(e){toast(e.message)}}
-async function addFuel(){if(!val("fuelVehicle")||!num(val("fuelAmount")))return toast("Vehicle and amount required");try{await save("fuel",{"Vehicle ID":val("fuelVehicle"),Date:val("fuelDate")||today(),Odometer:num(val("fuelOdo")),Quantity:num(val("fuelQty")),Amount:num(val("fuelAmount")),"Fuel Type":val("fuelType"),Notes:val("fuelNotes")});["fuelOdo","fuelQty","fuelAmount","fuelNotes"].forEach(id=>$(id).value="");renderAll();toast("Fuel saved");}catch(e){toast(e.message)}}
-async function addMaintenance(){if(!val("maintVehicle")||!num(val("maintAmount")))return toast("Vehicle and amount required");try{await save("maintenance",{"Vehicle ID":val("maintVehicle"),Date:val("maintDate")||today(),Category:val("maintCategory"),Amount:num(val("maintAmount")),Odometer:num(val("maintOdo")),"Next Target KM":num(val("maintTargetKm")),Remarks:val("maintRemarks")});["maintAmount","maintOdo","maintTargetKm","maintRemarks"].forEach(id=>$(id).value="");renderAll();toast("Maintenance saved");}catch(e){toast(e.message)}}
-function resetVehicleFilters(){$("vehicleTypeFilter").value="";$("vehicleFilter").value="";renderVehicles();}
+function displayDate(v){
+  if(!v) return "";
 
-function fillLists(){
-  const cats=unique((DB.passbook||[]).map(x=>x.Category));
-  opt($("dashCategory"),cats,x=>x,x=>x,"All Categories"); opt($("pbFilterCategory"),cats,x=>x,x=>x,"All Categories");
-  function dl(id,arr){const e=$(id);if(e)e.innerHTML=unique(arr).map(x=>`<option value="${esc(x)}"></option>`).join("");}
-  dl("categoryList",cats); dl("accountList",(DB.passbook||[]).map(x=>x.Account)); dl("remarksList",(DB.passbook||[]).map(x=>x.Remarks));
-  dl("companyList",(DB.salary||[]).map(x=>x.Company)); dl("salaryRemarksList",(DB.salary||[]).map(x=>x.Remarks)); dl("personList",(DB.transactions||[]).map(x=>x.Person));
-  opt($("emiLoan"),DB.loans||[],x=>x["Loan Name"],x=>x.ID,"Select loan");
+  const s = String(v);
+
+  // Convert ISO date such as 2026-07-04T18:30:00.000Z
+  if(s.includes("T")){
+    return s.slice(0,10);
+  }
+
+  return s;
 }
-document.addEventListener("DOMContentLoaded",()=>{
-  const saved=localStorage.getItem("afh-theme"); if(saved==="dark") document.body.classList.add("dark");
-  $("themeBtn").onclick=()=>{document.body.classList.toggle("dark");localStorage.setItem("afh-theme",document.body.classList.contains("dark")?"dark":"light");$("themeBtn").textContent=document.body.classList.contains("dark")?"☀️ Light":"🌙 Dark";};
-  $("themeBtn").textContent=document.body.classList.contains("dark")?"☀️ Light":"🌙 Dark";
-  $("menuBtn").onclick=()=>$("sidebar").classList.toggle("open");
-  document.querySelectorAll("[data-page]").forEach(b=>b.onclick=()=>{document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));$(b.dataset.page).classList.add("active");$("sidebar").classList.remove("open");});
-  ["dashMonth","dashCategory"].forEach(id=>$(id).addEventListener("change",renderDashboard));
-  ["pbFilterMonth","pbFilterCategory"].forEach(id=>$(id).addEventListener("change",renderPassbook));
-  $("vehicleTypeFilter").addEventListener("change",renderVehicles); $("vehicleFilter").addEventListener("change",renderVehicles);
-  $("spGroupSel").addEventListener("change",renderSplitter); $("spGroupExpense").addEventListener("change",renderSplitter);
-  ["pbDate","gtDate","spDate","fuelDate","maintDate"].forEach(id=>$(id).value=today());
-  ["salMonth","emiMonth"].forEach(id=>$(id).value=monthNow());
-  loadAll();
-});
+
+function recentRecords(arr, limit=10){
+  return [...arr]
+    .sort((a,b)=>String(b.Date||"").localeCompare(String(a.Date||"")))
+    .slice(0,limit);
+}
+
+function latestFuelOdometer(vehicleId){
+  const records = (DB.fuel||[])
+    .filter(x=>String(x["Vehicle ID"])===String(vehicleId))
+    .sort((a,b)=>num(b.Odometer)-num(a.Odometer));
+
+  return records.length ? num(records[0].Odometer) : 0;
+}
+
+function getMaintenanceRecord(vehicleId, type){
+
+  const keywords =
+    type === "oil"
+      ? ["oil","oil change"]
+      : ["service","servicing"];
+
+  const records = (DB.maintenance||[])
+    .filter(x=>{
+      if(String(x["Vehicle ID"]) !== String(vehicleId)) return false;
+
+      const category = String(x.Category||"").toLowerCase();
+
+      return keywords.some(k=>category.includes(k));
+    })
+    .sort((a,b)=>{
+
+      const kmDiff = num(b.Odometer)-num(a.Odometer);
+
+      if(kmDiff !== 0) return kmDiff;
+
+      return String(b.Date||"").localeCompare(String(a.Date||""));
+    });
+
+  return records[0] || null;
+}
+
+function getServiceInterval(vehicle){
+
+  const type = String(vehicle["Vehicle Type"]||"").toLowerCase();
+
+  if(
+    type.includes("bike") ||
+    type.includes("motorcycle") ||
+    type.includes("scooter")
+  ){
+    return 3000;
+  }
+
+  return 10000;
+}
+
+function maintenanceCard(vehicle){
+
+  const vehicleId = vehicle.ID;
+
+  const interval = getServiceInterval(vehicle);
+
+  const currentKM = latestFuelOdometer(vehicleId);
+
+  const lastOil = getMaintenanceRecord(vehicleId,"oil");
+  const lastService = getMaintenanceRecord(vehicleId,"service");
+
+  const lastOilKM = lastOil ? num(lastOil.Odometer) : 0;
+  const lastServiceKM = lastService ? num(lastService.Odometer) : 0;
+
+  const nextOilTarget =
+    lastOilKM > 0
+      ? lastOilKM + interval
+      : 0;
+
+  const nextServiceTarget =
+    lastServiceKM > 0
+      ? lastServiceKM + interval
+      : 0;
+
+  const oilRemaining =
+    nextOilTarget > 0
+      ? nextOilTarget-currentKM
+      : 0;
+
+  const serviceRemaining =
+    nextServiceTarget > 0
+      ? nextServiceTarget-currentKM
+      : 0;
+
+  const oilClass =
+    oilRemaining <= 0 && nextOilTarget > 0
+      ? "danger-km"
+      : oilRemaining < 500
+        ? "warning-km"
+        : "good-km";
+
+  const serviceClass =
+    serviceRemaining <= 0 && nextServiceTarget > 0
+      ? "danger-km"
+      : serviceRemaining < 500
+        ? "warning-km"
+        : "good-km";
+
+  return `
+    <div class="maintenance-card">
+
+      <h3>
+        ${esc(vehicle["Vehicle Type"]||"Vehicle")==="Bike" ? "🏍️" : "🚗"}
+        ${esc(vehicle["Vehicle Name"])}
+      </h3>
+
+      <div class="maint-row">
+        <span>Current Odometer</span>
+        <b>${currentKM ? currentKM.toLocaleString("en-IN")+" km" : "—"}</b>
+      </div>
+
+      <hr>
+
+      <div class="maint-section-title">
+        🛢️ Oil Change
+      </div>
+
+      <div class="maint-row">
+        <span>Last Oil Change</span>
+        <b>
+          ${
+            lastOil
+              ? displayDate(lastOil.Date)+" · "+lastOilKM.toLocaleString("en-IN")+" km"
+              : "No record"
+          }
+        </b>
+      </div>
+
+      <div class="maint-row">
+        <span>Last Actual KM</span>
+        <b>${lastOilKM ? lastOilKM.toLocaleString("en-IN")+" km" : "—"}</b>
+      </div>
+
+      <div class="maint-row">
+        <span>Next Oil Target</span>
+        <b>
+          ${
+            nextOilTarget
+              ? nextOilTarget.toLocaleString("en-IN")+" km"
+              : "—"
+          }
+        </b>
+      </div>
+
+      <div class="maint-row">
+        <span>KM Remaining</span>
+        <b class="${oilClass}">
+          ${
+            nextOilTarget
+              ? (
+                  oilRemaining >= 0
+                    ? oilRemaining.toLocaleString("en-IN")+" km"
+                    : Math.abs(oilRemaining).toLocaleString("en-IN")+" km overdue"
+                )
+              : "—"
+          }
+        </b>
+      </div>
+
+      <hr>
+
+      <div class="maint-section-title">
+        🔧 Service
+      </div>
+
+      <div class="maint-row">
+        <span>Last Service</span>
+        <b>
+          ${
+            lastService
+              ? displayDate(lastService.Date)+" · "+lastServiceKM.toLocaleString("en-IN")+" km"
+              : "No record"
+          }
+        </b>
+      </div>
+
+      <div class="maint-row">
+        <span>Last Actual KM</span>
+        <b>${lastServiceKM ? lastServiceKM.toLocaleString("en-IN")+" km" : "—"}</b>
+      </div>
+
+      <div class="maint-row">
+        <span>Next Service Target</span>
+        <b>
+          ${
+            nextServiceTarget
+              ? nextServiceTarget.toLocaleString("en-IN")+" km"
+              : "—"
+          }
+        </b>
+      </div>
+
+      <div class="maint-row">
+        <span>KM Remaining</span>
+        <b class="${serviceClass}">
+          ${
+            nextServiceTarget
+              ? (
+                  serviceRemaining >= 0
+                    ? serviceRemaining.toLocaleString("en-IN")+" km"
+                    : Math.abs(serviceRemaining).toLocaleString("en-IN")+" km overdue"
+                )
+              : "—"
+          }
+        </b>
+      </div>
+
+      <div class="maintenance-interval">
+        ${
+          String(vehicle["Vehicle Type"]||"").toLowerCase().includes("bike")
+            ? "Oil Change & Service every 3,000 km"
+            : "Oil Change & Service every 10,000 km"
+        }
+      </div>
+
+    </div>
+  `;
+}
+
+
+function renderVehicles(){
+
+  const vehicles = DB.vehicles || [];
+
+  const type = val("vehicleTypeFilter");
+  const vid = val("vehicleFilter");
+
+  opt(
+    $("vehicleFilter"),
+    vehicles.filter(v=>!type || v["Vehicle Type"]===type),
+    v=>v["Vehicle Name"],
+    v=>v.ID,
+    "All Vehicles"
+  );
+
+  ["fuelVehicle","maintVehicle"].forEach(id=>
+    opt(
+      $(id),
+      vehicles,
+      v=>v["Vehicle Name"],
+      v=>v.ID,
+      "Select vehicle"
+    )
+  );
+
+  const fuels = (DB.fuel||[])
+    .filter(x=>
+      !vid ||
+      String(x["Vehicle ID"])===String(vid)
+    );
+
+  const maint = (DB.maintenance||[])
+    .filter(x=>
+      !vid ||
+      String(x["Vehicle ID"])===String(vid)
+    );
+
+  const fcost = fuels.reduce(
+    (s,x)=>s+num(x.Amount),
+    0
+  );
+
+  const mcost = maint.reduce(
+    (s,x)=>s+num(x.Amount),
+    0
+  );
+
+  $("vehicleDash").innerHTML =
+    card("Fuel Cost",fmt(fcost))+
+    card("Maintenance Cost",fmt(mcost))+
+    card("Total Cost",fmt(fcost+mcost));
+
+
+  // ===============================
+  // RECENT FUEL TRANSACTIONS ONLY
+  // ===============================
+
+  const recentFuel = recentRecords(fuels,10);
+
+  $("fuelList").innerHTML =
+    recentFuel.map(x=>`
+      <div class="item">
+
+        <div>
+
+          <b>${esc(vehicleName(x["Vehicle ID"]))}</b>
+
+          <br>
+
+          <small>
+            ${displayDate(x.Date)}
+            • ${num(x.Odometer).toLocaleString("en-IN")} km
+            • ${num(x.Quantity)} L
+          </small>
+
+        </div>
+
+        <div>
+
+          <b>${fmt(x.Amount)}</b>
+
+          <br>
+
+          <button
+            class="danger"
+            onclick="del('fuel','${x.ID}')"
+          >
+            Delete
+          </button>
+
+        </div>
+
+      </div>
+    `).join("")
+    ||
+    "<p class='muted'>No recent fuel entries</p>";
+
+
+  // ===============================
+  // RECENT MAINTENANCE ONLY
+  // ===============================
+
+  const recentMaintenance = recentRecords(maint,10);
+
+  $("maintenanceList").innerHTML =
+    recentMaintenance.map(x=>`
+      <div class="item">
+
+        <div>
+
+          <b>
+            ${esc(vehicleName(x["Vehicle ID"]))}
+            • ${esc(x.Category)}
+          </b>
+
+          <br>
+
+          <small>
+            ${displayDate(x.Date)}
+            • ${num(x.Odometer).toLocaleString("en-IN")} km
+            ${x.Remarks ? " • "+esc(x.Remarks) : ""}
+          </small>
+
+        </div>
+
+        <div>
+
+          <b>${fmt(x.Amount)}</b>
+
+          <br>
+
+          <button
+            class="danger"
+            onclick="del('maintenance','${x.ID}')"
+          >
+            Delete
+          </button>
+
+        </div>
+
+      </div>
+    `).join("")
+    ||
+    "<p class='muted'>No recent maintenance entries</p>";
+
+
+  // ===============================
+  // MAINTENANCE SUMMARY
+  // ===============================
+
+  const selectedVehicles =
+    vehicles.filter(v=>
+      !vid ||
+      String(v.ID)===String(vid)
+    );
+
+  $("vehicleMaintenanceSummary").innerHTML =
+    selectedVehicles
+      .map(maintenanceCard)
+      .join("");
+
+
+  // ===============================
+  // CHARTS
+  // ===============================
+
+  const chartVehicles =
+    selectedVehicles.length
+      ? selectedVehicles
+      : vehicles;
+
+  const labels =
+    chartVehicles.map(v=>v["Vehicle Name"]);
+
+
+  chart(
+    "fuelChart",
+    "bar",
+    {
+      labels,
+      datasets:[
+        {
+          label:"Fuel Cost",
+          data:chartVehicles.map(v=>
+            (DB.fuel||[])
+              .filter(x=>
+                String(x["Vehicle ID"])===String(v.ID)
+              )
+              .reduce(
+                (s,x)=>s+num(x.Amount),
+                0
+              )
+          )
+        }
+      ]
+    }
+  );
+
+
+  chart(
+    "maintenanceChart",
+    "bar",
+    {
+      labels,
+      datasets:[
+        {
+          label:"Maintenance Cost",
+          data:chartVehicles.map(v=>
+            (DB.maintenance||[])
+              .filter(x=>
+                String(x["Vehicle ID"])===String(v.ID)
+              )
+              .reduce(
+                (s,x)=>s+num(x.Amount),
+                0
+              )
+          )
+        }
+      ]
+    }
+  );
+
+}
