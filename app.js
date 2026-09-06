@@ -113,39 +113,52 @@ async function api(action, payload = {}) {
 /* =================================================
    LOAD DATA
 ================================================= */
-
 async function loadAll() {
 
   if (!apiReady()) {
-
     setStatus("⚠️ API URL required");
-
-    toast(
-      "Paste Apps Script Web App URL in app.js"
-    );
-
+    toast("Paste Apps Script Web App URL in app.js");
     renderAll();
-
     return;
-
   }
 
   try {
 
-    setStatus("☁️ Syncing...");
+    setStatus("☁️ Connecting...");
 
-    const r = await fetch(
-      API_URL + "?action=loadAll",
-      {
-        cache: "no-store"
-      }
-    );
+    const url =
+      API_URL +
+      "?action=loadAll&_=" +
+      Date.now();
 
-    const j = await r.json();
+    const r = await fetch(url, {
+      method: "GET",
+      redirect: "follow",
+      cache: "no-store"
+    });
+
+    if (!r.ok) {
+      throw new Error(
+        "Server error: " + r.status
+      );
+    }
+
+    const text = await r.text();
+
+    let j;
+
+    try {
+      j = JSON.parse(text);
+    } catch (err) {
+      console.error("Invalid API response:", text);
+      throw new Error(
+        "API returned an invalid response. Check Apps Script deployment."
+      );
+    }
 
     if (!j.success) {
       throw new Error(
-        j.error || "Load failed"
+        j.error || "Cloud load failed"
       );
     }
 
@@ -167,33 +180,28 @@ async function loadAll() {
       "vehicles",
       "fuel",
       "maintenance"
-    ].forEach(k => {
-
-      DB[k] = DB[k] || [];
-
+    ].forEach(key => {
+      DB[key] = DB[key] || [];
     });
 
     setStatus("☁️ Synced");
 
     renderAll();
 
-  }
+  } catch (e) {
 
-  catch (e) {
-
-    console.error(e);
+    console.error("Load error:", e);
 
     setStatus("⚠️ Sync failed");
 
-    toast(e.message);
+    toast(
+      e.message ||
+      "Unable to connect to Google Apps Script"
+    );
 
     renderAll();
-
   }
-
 }
-
-
 /* =================================================
    SAVE / DELETE
 ================================================= */
