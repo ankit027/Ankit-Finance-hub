@@ -1,19 +1,12 @@
 /*
   IMPORTANT:
-  Paste ONLY the Google Apps Script Web App URL below.
+  Paste your deployed Google Apps Script Web App URL below.
 */
 
 const API_URL =
   "https://script.google.com/macros/s/AKfycbwYIXL6HtbCW6QiSediymQGV_zySDfcd0f-f61zJ2ihqeIFJ4h1C_Ge6T_zlaVWw3-M/exec";
 
-
-let DB = {};
-let charts = {};
-
-
-/* =================================================
-   BASIC HELPERS
-================================================= */
+let DB = {}, charts = {};
 
 const $ = id => document.getElementById(id);
 
@@ -23,65 +16,52 @@ const today = () =>
 const monthNow = () =>
   new Date().toISOString().slice(0, 7);
 
-const num = value =>
-  Number(value || 0);
+const num = v => Number(v || 0);
 
-const fmt = value =>
-  "₹" + num(value).toLocaleString("en-IN", {
+const fmt = v =>
+  "₹" + num(v).toLocaleString("en-IN", {
     maximumFractionDigits: 2
   });
 
-const esc = value =>
-  String(value ?? "").replace(/[&<>"']/g, char => ({
+const esc = v =>
+  String(v ?? "").replace(/[&<>"']/g, m => ({
     "&": "&amp;",
     "<": "&lt;",
     ">": "&gt;",
     '"': "&quot;",
     "'": "&#039;"
-  }[char]));
+  }[m]));
 
 const val = id =>
   ($(id)?.value || "").trim();
 
 
-function toast(message, ms = 2500) {
+/* =================================================
+   TOAST / STATUS
+================================================= */
 
-  const element = $("toast");
+function toast(msg, ms = 2500) {
 
-  if (!element) {
-    return;
-  }
+  const t = $("toast");
 
-  element.textContent = message;
+  if (!t) return;
 
-  element.classList.add("show");
+  t.textContent = msg;
+  t.classList.add("show");
 
   clearTimeout(window._toast);
 
   window._toast = setTimeout(() => {
-    element.classList.remove("show");
+    t.classList.remove("show");
   }, ms);
 
 }
 
-
 function setStatus(text) {
 
-  const element = $("status");
+  const el = $("status");
 
-  if (element) {
-    element.textContent = text;
-  }
-
-}
-
-
-function apiReady() {
-
-  return (
-    API_URL &&
-    !API_URL.includes("PASTE_YOUR")
-  );
+  if (el) el.textContent = text;
 
 }
 
@@ -89,6 +69,13 @@ function apiReady() {
 /* =================================================
    API
 ================================================= */
+
+function apiReady() {
+
+  return API_URL &&
+    !API_URL.includes("PASTE_YOUR");
+
+}
 
 async function api(action, payload = {}) {
 
@@ -98,7 +85,7 @@ async function api(action, payload = {}) {
     );
   }
 
-  const response = await fetch(API_URL, {
+  const r = await fetch(API_URL, {
     method: "POST",
     mode: "cors",
     headers: {
@@ -110,21 +97,21 @@ async function api(action, payload = {}) {
     })
   });
 
-  const json = await response.json();
+  const j = await r.json();
 
-  if (!json.success) {
+  if (!j.success) {
     throw new Error(
-      json.error || "Cloud request failed"
+      j.error || "Cloud request failed"
     );
   }
 
-  return json;
+  return j;
 
 }
 
 
 /* =================================================
-   LOAD ALL DATA
+   LOAD DATA
 ================================================= */
 
 async function loadAll() {
@@ -140,29 +127,29 @@ async function loadAll() {
     renderAll();
 
     return;
+
   }
 
   try {
 
     setStatus("☁️ Syncing...");
 
-    const response = await fetch(
+    const r = await fetch(
       API_URL + "?action=loadAll",
       {
         cache: "no-store"
       }
     );
 
-    const json = await response.json();
+    const j = await r.json();
 
-    if (!json.success) {
+    if (!j.success) {
       throw new Error(
-        json.error || "Load failed"
+        j.error || "Load failed"
       );
     }
 
-    DB = json.data || {};
-
+    DB = j.data || {};
 
     [
       "transactions",
@@ -180,24 +167,25 @@ async function loadAll() {
       "vehicles",
       "fuel",
       "maintenance"
-    ].forEach(key => {
+    ].forEach(k => {
 
-      DB[key] = DB[key] || [];
+      DB[k] = DB[k] || [];
 
     });
-
 
     setStatus("☁️ Synced");
 
     renderAll();
 
-  } catch (error) {
+  }
 
-    console.error(error);
+  catch (e) {
+
+    console.error(e);
 
     setStatus("⚠️ Sync failed");
 
-    toast(error.message);
+    toast(e.message);
 
     renderAll();
 
@@ -207,12 +195,12 @@ async function loadAll() {
 
 
 /* =================================================
-   SAVE
+   SAVE / DELETE
 ================================================= */
 
 async function save(table, data) {
 
-  const response = await api(
+  const r = await api(
     "save",
     {
       table,
@@ -220,79 +208,51 @@ async function save(table, data) {
     }
   );
 
-  const record =
-    response.data.record;
+  const rec = r.data.record;
 
-  DB[table] =
-    DB[table] || [];
+  DB[table] = DB[table] || [];
 
-  const index =
-    DB[table].findIndex(
-      item =>
-        String(item.ID) ===
-        String(record.ID)
-    );
+  const i = DB[table].findIndex(
+    x => String(x.ID) === String(rec.ID)
+  );
 
-  if (index >= 0) {
-
-    DB[table][index] =
-      record;
-
-  } else {
-
-    DB[table].push(record);
-
+  if (i >= 0) {
+    DB[table][i] = rec;
+  }
+  else {
+    DB[table].push(rec);
   }
 
-  return record;
+  return rec;
 
 }
-
-
-/* =================================================
-   DELETE
-================================================= */
 
 async function del(table, id) {
 
-  if (!confirm("Delete this record?")) {
-    return;
-  }
+  if (!confirm("Delete this record?")) return;
 
-  try {
+  await api(
+    "delete",
+    {
+      table,
+      id
+    }
+  );
 
-    await api(
-      "delete",
-      {
-        table,
-        id
-      }
+  DB[table] =
+    (DB[table] || []).filter(
+      x => String(x.ID) !== String(id)
     );
 
-    DB[table] =
-      (DB[table] || []).filter(
-        item =>
-          String(item.ID) !==
-          String(id)
-      );
+  renderAll();
 
-    renderAll();
-
-    toast("Deleted");
-
-  } catch (error) {
-
-    console.error(error);
-
-    toast(error.message);
-
-  }
+  toast("Deleted");
 
 }
 
 
 /* =================================================
-   COMMON UI HELPERS
+   COMMON HELPERS
 ================================================= */
 
 function card(label, value) {
@@ -306,51 +266,80 @@ function card(label, value) {
 
 }
 
+function monthOf(v) {
 
-function monthOf(value) {
-
-  return String(value || "")
-    .slice(0, 7);
+  return String(v || "").slice(0, 7);
 
 }
 
-
-function unique(array) {
+function unique(a) {
 
   return [
     ...new Set(
-      array.filter(Boolean)
+      a.filter(Boolean)
     )
   ];
 
 }
 
-
 function opt(
-  element,
-  array,
+  el,
+  arr,
   textFn = x => x,
   valueFn = x => x,
   placeholder = "Select"
 ) {
 
-  if (!element) {
-    return;
-  }
+  if (!el) return;
 
-  const current =
-    element.value;
+  const current = el.value;
 
-  element.innerHTML =
+  el.innerHTML =
     `<option value="">${placeholder}</option>` +
-    array.map(item => `
-      <option value="${esc(valueFn(item))}">
-        ${esc(textFn(item))}
+    arr.map(x => `
+      <option value="${esc(valueFn(x))}">
+        ${esc(textFn(x))}
       </option>
     `).join("");
 
-  element.value =
-    current;
+  const exists =
+    arr.some(
+      x =>
+        String(valueFn(x)) ===
+        String(current)
+    );
+
+  if (exists) {
+    el.value = current;
+  }
+
+}
+
+function displayDate(v) {
+
+  if (!v) return "";
+
+  const s = String(v);
+
+  if (s.includes("T")) {
+    return s.slice(0, 10);
+  }
+
+  return s;
+
+}
+
+function recentRecords(arr, limit = 10) {
+
+  return [...arr]
+    .sort(
+      (a, b) =>
+        String(b.Date || "")
+          .localeCompare(
+            String(a.Date || "")
+          )
+    )
+    .slice(0, limit);
 
 }
 
@@ -385,34 +374,28 @@ function chart(
   options = {}
 ) {
 
-  if (!window.Chart) {
-    return;
-  }
+  if (!window.Chart) return;
 
   if (charts[id]) {
     charts[id].destroy();
   }
 
-  const element =
-    $(id);
+  const el = $(id);
 
-  if (!element) {
-    return;
-  }
+  if (!el) return;
 
-  charts[id] =
-    new Chart(
-      element,
-      {
-        type,
-        data,
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          ...options
-        }
+  charts[id] = new Chart(
+    el,
+    {
+      type,
+      data,
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        ...options
       }
-    );
+    }
+  );
 
 }
 
@@ -423,201 +406,204 @@ function chart(
 
 function renderDashboard() {
 
-  const month =
-    val("dashMonth");
+  const m = val("dashMonth");
+  const c = val("dashCategory");
 
-  const category =
-    val("dashCategory");
-
-
-  const passbook =
-    (DB.passbook || []).filter(item =>
-      (!month ||
-        monthOf(item.Date) === month) &&
-      (!category ||
-        item.Category === category)
-    );
-
+  let pb =
+    (DB.passbook || [])
+      .filter(
+        x =>
+          (!m || monthOf(x.Date) === m) &&
+          (!c || x.Category === c)
+      );
 
   const income =
-    passbook
-      .filter(item =>
-        item.Type === "Income"
+    pb
+      .filter(
+        x => x.Type === "Income"
       )
       .reduce(
-        (sum, item) =>
-          sum + num(item.Amount),
+        (s, x) =>
+          s + num(x.Amount),
         0
       );
-
 
   const expense =
-    passbook
-      .filter(item =>
-        item.Type === "Expense"
+    pb
+      .filter(
+        x => x.Type === "Expense"
       )
       .reduce(
-        (sum, item) =>
-          sum + num(item.Amount),
+        (s, x) =>
+          s + num(x.Amount),
         0
       );
-
 
   const salary =
     (DB.salary || [])
-      .filter(item =>
-        !month ||
-        String(item.Month) === month
+      .filter(
+        x =>
+          !m ||
+          String(x.Month) === m
       )
       .reduce(
-        (sum, item) =>
-          sum + num(item.Amount),
+        (s, x) =>
+          s + num(x.Amount),
         0
       );
-
 
   const emi =
     (DB.emi || [])
-      .filter(item =>
-        !month ||
-        String(item.Month) === month
+      .filter(
+        x =>
+          !m ||
+          String(x.Month) === m
       )
       .reduce(
-        (sum, item) =>
-          sum + num(item.Amount),
+        (s, x) =>
+          s + num(x.Amount),
         0
       );
 
+  const toReceive =
+    (DB.transactions || [])
+      .reduce((s, x) => {
 
-  let toReceive = 0;
-  let toPay = 0;
+        if (
+          x.Type ===
+          "Pending to Take"
+        ) {
+          return s + num(x.Amount);
+        }
 
+        if (
+          x.Type === "Received"
+        ) {
+          return s - num(x.Amount);
+        }
 
-  (DB.transactions || [])
-    .forEach(item => {
+        return s;
 
-      if (
-        item.Type ===
-        "Pending to Take"
-      ) {
-        toReceive +=
-          num(item.Amount);
-      }
+      }, 0);
 
-      if (
-        item.Type ===
-        "Received"
-      ) {
-        toReceive -=
-          num(item.Amount);
-      }
+  const toPay =
+    (DB.transactions || [])
+      .reduce((s, x) => {
 
-      if (
-        item.Type ===
-        "Pending to Pay"
-      ) {
-        toPay +=
-          num(item.Amount);
-      }
+        if (
+          x.Type ===
+          "Pending to Pay"
+        ) {
+          return s + num(x.Amount);
+        }
 
-      if (
-        item.Type ===
-        "Paid"
-      ) {
-        toPay -=
-          num(item.Amount);
-      }
+        if (
+          x.Type === "Paid"
+        ) {
+          return s - num(x.Amount);
+        }
 
-    });
+        return s;
 
+      }, 0);
 
-  if ($("dash")) {
+  $("dash").innerHTML = [
 
-    $("dash").innerHTML = [
+    card(
+      "💰 Salary",
+      fmt(salary)
+    ),
 
-      card(
-        "💰 Salary",
-        fmt(salary)
-      ),
+    card(
+      "📈 Total Income",
+      fmt(income)
+    ),
 
-      card(
-        "📈 Total Income",
-        fmt(income)
-      ),
+    card(
+      "💸 Expense",
+      fmt(expense)
+    ),
 
-      card(
-        "💸 Expense",
-        fmt(expense)
-      ),
+    card(
+      "🏦 EMI Paid",
+      fmt(emi)
+    ),
 
-      card(
-        "🏦 EMI Paid",
-        fmt(emi)
-      ),
+    card(
+      "📉 SIP Paid",
+      "₹0"
+    ),
 
-      card(
-        "📉 SIP Paid",
-        "₹0"
-      ),
-
-      card(
-        "🤝 To Receive",
-        fmt(Math.max(0, toReceive))
-      ),
-
-      card(
-        "🤝 To Pay",
-        fmt(Math.max(0, toPay))
-      ),
-
-      card(
-        "💳 Net",
-        fmt(income - expense - emi)
+    card(
+      "🤝 To Receive",
+      fmt(
+        Math.max(
+          0,
+          toReceive
+        )
       )
+    ),
 
-    ].join("");
+    card(
+      "🤝 To Pay",
+      fmt(
+        Math.max(
+          0,
+          toPay
+        )
+      )
+    ),
 
-  }
+    card(
+      "💳 Net",
+      fmt(
+        income -
+        expense -
+        emi
+      )
+    )
 
+  ].join("");
 
   const months =
     unique(
       (DB.passbook || [])
-        .map(item =>
-          monthOf(item.Date)
+        .map(
+          x =>
+            monthOf(x.Date)
         )
-    ).sort();
+    )
+    .sort();
 
-
-  const incomeData =
-    months.map(monthValue =>
+  const inc =
+    months.map(mm =>
       (DB.passbook || [])
-        .filter(item =>
-          monthOf(item.Date) === monthValue &&
-          item.Type === "Income"
+        .filter(
+          x =>
+            monthOf(x.Date) === mm &&
+            x.Type === "Income"
         )
         .reduce(
-          (sum, item) =>
-            sum + num(item.Amount),
+          (s, x) =>
+            s + num(x.Amount),
           0
         )
     );
 
-
-  const expenseData =
-    months.map(monthValue =>
+  const exp =
+    months.map(mm =>
       (DB.passbook || [])
-        .filter(item =>
-          monthOf(item.Date) === monthValue &&
-          item.Type === "Expense"
+        .filter(
+          x =>
+            monthOf(x.Date) === mm &&
+            x.Type === "Expense"
         )
         .reduce(
-          (sum, item) =>
-            sum + num(item.Amount),
+          (s, x) =>
+            s + num(x.Amount),
           0
         )
     );
-
 
   chart(
     "mainChart",
@@ -627,46 +613,49 @@ function renderDashboard() {
       datasets: [
         {
           label: "Income",
-          data: incomeData
+          data: inc
         },
         {
           label: "Expense",
-          data: expenseData
+          data: exp
         }
       ]
     }
   );
 
-
-  const categories =
+  const cats =
     unique(
-      passbook
-        .filter(item =>
-          item.Type === "Expense"
+      pb
+        .filter(
+          x =>
+            x.Type === "Expense"
         )
-        .map(item =>
-          item.Category || "Other"
+        .map(
+          x =>
+            x.Category ||
+            "Other"
         )
     );
-
 
   chart(
     "expenseChart",
     "doughnut",
     {
-      labels: categories,
+      labels: cats,
       datasets: [
         {
           data:
-            categories.map(categoryValue =>
-              passbook
-                .filter(item =>
-                  item.Type === "Expense" &&
-                  (item.Category || "Other") === categoryValue
+            cats.map(cat =>
+              pb
+                .filter(
+                  x =>
+                    x.Type ===
+                    "Expense" &&
+                    (x.Category || "Other") === cat
                 )
                 .reduce(
-                  (sum, item) =>
-                    sum + num(item.Amount),
+                  (s, x) =>
+                    s + num(x.Amount),
                   0
                 )
             )
@@ -687,17 +676,17 @@ function renderPassbook() {
   const month =
     val("pbFilterMonth");
 
-  const category =
+  const cat =
     val("pbFilterCategory");
-
 
   const rows =
     (DB.passbook || [])
-      .filter(item =>
-        (!month ||
-          monthOf(item.Date) === month) &&
-        (!category ||
-          item.Category === category)
+      .filter(
+        x =>
+          (!month ||
+            monthOf(x.Date) === month) &&
+          (!cat ||
+            x.Category === cat)
       )
       .sort(
         (a, b) =>
@@ -707,126 +696,133 @@ function renderPassbook() {
             )
       );
 
-
   const income =
     rows
-      .filter(item =>
-        item.Type === "Income"
+      .filter(
+        x => x.Type === "Income"
       )
       .reduce(
-        (sum, item) =>
-          sum + num(item.Amount),
+        (s, x) =>
+          s + num(x.Amount),
         0
       );
-
 
   const expense =
     rows
-      .filter(item =>
-        item.Type === "Expense"
+      .filter(
+        x => x.Type === "Expense"
       )
       .reduce(
-        (sum, item) =>
-          sum + num(item.Amount),
+        (s, x) =>
+          s + num(x.Amount),
         0
       );
 
-
-  if ($("passbookDash")) {
-
-    $("passbookDash").innerHTML =
-      card("Income", fmt(income)) +
-      card("Expense", fmt(expense)) +
-      card(
-        "Balance",
-        fmt(income - expense)
-      );
-
-  }
-
-
-  if ($("pbList")) {
-
-    $("pbList").innerHTML =
-      rows.map(item => `
-        <div class="item">
-
-          <div>
-
-            <b>
-              ${esc(item.Category || "Uncategorized")}
-              •
-              ${esc(item.Type)}
-            </b>
-
-            <br>
-
-            <small>
-              ${esc(item.Date)}
-              •
-              ${esc(item.Account || "")}
-
-              ${
-                item.Remarks
-                  ? " • " +
-                    esc(item.Remarks)
-                  : ""
-              }
-            </small>
-
-          </div>
-
-          <div>
-
-            <b>
-              ${fmt(item.Amount)}
-            </b>
-
-            <br>
-
-            <button
-              class="danger"
-              onclick="del('passbook','${item.ID}')"
-            >
-              Delete
-            </button>
-
-          </div>
-
-        </div>
-      `).join("")
-      ||
-      "<p class='muted'>No entries</p>";
-
-  }
-
-
-  const categories =
-    unique(
-      rows.map(item =>
-        item.Category || "Other"
+  $("passbookDash").innerHTML =
+    card(
+      "Income",
+      fmt(income)
+    ) +
+    card(
+      "Expense",
+      fmt(expense)
+    ) +
+    card(
+      "Balance",
+      fmt(
+        income -
+        expense
       )
     );
 
+  $("pbList").innerHTML =
+    rows.map(x => `
+      <div class="item">
+
+        <div>
+
+          <b>
+            ${esc(
+              x.Category ||
+              "Uncategorized"
+            )}
+            •
+            ${esc(x.Type)}
+          </b>
+
+          <br>
+
+          <small>
+            ${esc(x.Date)}
+            •
+            ${esc(
+              x.Account || ""
+            )}
+
+            ${
+              x.Remarks
+                ? " • " +
+                  esc(x.Remarks)
+                : ""
+            }
+
+          </small>
+
+        </div>
+
+        <div>
+
+          <b>
+            ${fmt(x.Amount)}
+          </b>
+
+          <br>
+
+          <button
+            class="danger"
+            onclick="del(
+              'passbook',
+              '${x.ID}'
+            )"
+          >
+            Delete
+          </button>
+
+        </div>
+
+      </div>
+    `).join("")
+    ||
+    "<p class='muted'>No entries</p>";
+
+  const cats =
+    unique(
+      rows.map(
+        x =>
+          x.Category ||
+          "Other"
+      )
+    );
 
   chart(
     "passbookChart",
     "bar",
     {
-      labels: categories,
+      labels: cats,
       datasets: [
         {
           label: "Amount",
           data:
-            categories.map(categoryValue =>
+            cats.map(c =>
               rows
-                .filter(item =>
-                  (item.Category || "Other") ===
-                  categoryValue
+                .filter(
+                  x =>
+                    (x.Category ||
+                      "Other") === c
                 )
                 .reduce(
-                  (sum, item) =>
-                    sum + num(item.Amount),
+                  (s, x) =>
+                    s + num(x.Amount),
                   0
                 )
             )
@@ -836,7 +832,6 @@ function renderPassbook() {
   );
 
 }
-
 
 async function addPassbook() {
 
@@ -859,7 +854,9 @@ async function addPassbook() {
         Date: val("pbDate"),
         Type: val("pbType"),
         Category: val("pbCat"),
-        Amount: num(val("pbAmt")),
+        Amount: num(
+          val("pbAmt")
+        ),
         Account: val("pbAccount"),
         Remarks: val("pbRemarks")
       }
@@ -869,16 +866,18 @@ async function addPassbook() {
 
     renderAll();
 
-    toast("Saved to cloud");
+    toast(
+      "Saved to cloud"
+    );
 
-  } catch (error) {
+  }
+  catch (e) {
 
-    toast(error.message);
+    toast(e.message);
 
   }
 
 }
-
 
 function clearPassbook() {
 
@@ -890,23 +889,17 @@ function clearPassbook() {
     "pbRemarks"
   ].forEach(id => {
 
-    if ($(id)) {
-      $(id).value = "";
-    }
+    $(id).value = "";
 
   });
 
-  if ($("pbDate")) {
-    $("pbDate").value = today();
-  }
+  $("pbDate").value =
+    today();
 
-  if ($("pbType")) {
-    $("pbType").value =
-      "Expense";
-  }
+  $("pbType").value =
+    "Expense";
 
 }
-
 
 function resetPassbookFilters() {
 
@@ -916,7 +909,6 @@ function resetPassbookFilters() {
   renderPassbook();
 
 }
-
 
 function resetDashFilters() {
 
@@ -944,110 +936,109 @@ function renderSalary() {
             )
       );
 
-
-  if ($("salaryDash")) {
-
-    $("salaryDash").innerHTML =
-      card(
-        "Total Salary",
-        fmt(
-          rows.reduce(
-            (sum, item) =>
-              sum + num(item.Amount),
-            0
-          )
+  $("salaryDash").innerHTML =
+    card(
+      "Total Salary",
+      fmt(
+        rows.reduce(
+          (s, x) =>
+            s + num(x.Amount),
+          0
         )
-      ) +
-      card(
-        "Latest",
-        fmt(rows[0]?.Amount || 0)
-      );
+      )
+    ) +
+    card(
+      "Latest",
+      fmt(
+        rows[0]?.Amount || 0
+      )
+    );
 
-  }
+  $("salaryList").innerHTML =
+    rows.map(x => `
+      <div class="item">
 
+        <div>
 
-  if ($("salaryList")) {
+          <b>
+            ${esc(
+              x.Company ||
+              "Salary"
+            )}
+          </b>
 
-    $("salaryList").innerHTML =
-      rows.map(item => `
-        <div class="item">
+          <br>
 
-          <div>
+          <small>
 
-            <b>
-              ${esc(
-                item.Company || "Salary"
-              )}
-            </b>
+            ${esc(x.Month)}
 
-            <br>
+            ${
+              x.Remarks
+                ? " • " +
+                  esc(x.Remarks)
+                : ""
+            }
 
-            <small>
-              ${esc(item.Month)}
-
-              ${
-                item.Remarks
-                  ? " • " +
-                    esc(item.Remarks)
-                  : ""
-              }
-            </small>
-
-          </div>
-
-          <div>
-
-            <b>
-              ${fmt(item.Amount)}
-            </b>
-
-            <br>
-
-            <button
-              class="danger"
-              onclick="del('salary','${item.ID}')"
-            >
-              Delete
-            </button>
-
-          </div>
+          </small>
 
         </div>
-      `).join("")
-      ||
-      "<p class='muted'>No salary records</p>";
 
-  }
+        <div>
 
+          <b>
+            ${fmt(x.Amount)}
+          </b>
 
-  const reversed =
-    rows.slice().reverse();
+          <br>
 
+          <button
+            class="danger"
+            onclick="del(
+              'salary',
+              '${x.ID}'
+            )"
+          >
+            Delete
+          </button>
+
+        </div>
+
+      </div>
+    `).join("")
+    ||
+    "<p class='muted'>No salary records</p>";
 
   chart(
     "salaryChart",
     "line",
     {
       labels:
-        reversed.map(
-          item => item.Month
-        ),
+        rows
+          .slice()
+          .reverse()
+          .map(
+            x => x.Month
+          ),
 
       datasets: [
         {
           label: "Salary",
+
           data:
-            reversed.map(
-              item =>
-                num(item.Amount)
-            )
+            rows
+              .slice()
+              .reverse()
+              .map(
+                x =>
+                  num(x.Amount)
+              )
         }
       ]
     }
   );
 
 }
-
 
 async function addSalary() {
 
@@ -1065,10 +1056,19 @@ async function addSalary() {
     await save(
       "salary",
       {
-        Month: val("salMonth"),
-        Company: val("salCompany"),
-        Amount: num(val("salAmount")),
-        Remarks: val("salRemarks")
+        Month:
+          val("salMonth"),
+
+        Company:
+          val("salCompany"),
+
+        Amount:
+          num(
+            val("salAmount")
+          ),
+
+        Remarks:
+          val("salRemarks")
       }
     );
 
@@ -1078,19 +1078,20 @@ async function addSalary() {
       "salRemarks"
     ].forEach(id => {
 
-      if ($(id)) {
-        $(id).value = "";
-      }
+      $(id).value = "";
 
     });
 
     renderAll();
 
-    toast("Salary saved");
+    toast(
+      "Salary saved"
+    );
 
-  } catch (error) {
+  }
+  catch (e) {
 
-    toast(error.message);
+    toast(e.message);
 
   }
 
@@ -1109,122 +1110,117 @@ function renderLoans() {
   const emi =
     DB.emi || [];
 
-
   const total =
     loans.reduce(
-      (sum, item) =>
-        sum +
-        num(item["Initial Amount"]),
+      (s, x) =>
+        s +
+        num(
+          x["Initial Amount"]
+        ),
       0
     );
-
 
   const paid =
     emi.reduce(
-      (sum, item) =>
-        sum + num(item.Amount),
+      (s, x) =>
+        s +
+        num(x.Amount),
       0
     );
 
-
-  if ($("loanDash")) {
-
-    $("loanDash").innerHTML =
-      card(
-        "Total Loan",
-        fmt(total)
-      ) +
-      card(
-        "EMI Paid",
-        fmt(paid)
-      ) +
-      card(
-        "Remaining",
-        fmt(
-          Math.max(
-            0,
-            total - paid
-          )
+  $("loanDash").innerHTML =
+    card(
+      "Total Loan",
+      fmt(total)
+    ) +
+    card(
+      "EMI Paid",
+      fmt(paid)
+    ) +
+    card(
+      "Remaining",
+      fmt(
+        Math.max(
+          0,
+          total - paid
         )
-      );
+      )
+    );
 
-  }
+  $("loanList").innerHTML =
+    loans.map(l => {
 
-
-  if ($("loanList")) {
-
-    $("loanList").innerHTML =
-      loans.map(loan => {
-
-        const loanPaid =
-          emi
-            .filter(item =>
+      const p =
+        emi
+          .filter(
+            e =>
               String(
-                item["Loan ID"]
+                e["Loan ID"]
               ) ===
-              String(loan.ID)
-            )
-            .reduce(
-              (sum, item) =>
-                sum + num(item.Amount),
-              0
-            );
+              String(l.ID)
+          )
+          .reduce(
+            (s, e) =>
+              s +
+              num(e.Amount),
+            0
+          );
 
-        return `
-          <div class="item">
+      return `
+        <div class="item">
 
-            <div>
+          <div>
 
-              <b>
-                ${esc(
-                  loan["Loan Name"]
-                )}
-              </b>
+            <b>
+              ${esc(
+                l["Loan Name"]
+              )}
+            </b>
 
-              <br>
+            <br>
 
-              <small>
-                ${esc(
-                  loan.Remarks || ""
-                )}
-              </small>
-
-            </div>
-
-            <div>
-
-              Initial:
-              <b>
-                ${fmt(
-                  loan["Initial Amount"]
-                )}
-              </b>
-
-              <br>
-
-              Paid:
-              ${fmt(loanPaid)}
-
-              <br>
-
-              <button
-                class="danger"
-                onclick="del('loans','${loan.ID}')"
-              >
-                Delete
-              </button>
-
-            </div>
+            <small>
+              ${esc(
+                l.Remarks || ""
+              )}
+            </small>
 
           </div>
-        `;
 
-      }).join("")
-      ||
-      "<p class='muted'>No loans</p>";
+          <div>
 
-  }
+            Initial:
+            <b>
+              ${fmt(
+                l["Initial Amount"]
+              )}
+            </b>
 
+            <br>
+
+            Paid:
+            ${fmt(p)}
+
+            <br>
+
+            <button
+              class="danger"
+              onclick="del(
+                'loans',
+                '${l.ID}'
+              )"
+            >
+              Delete
+            </button>
+
+          </div>
+
+        </div>
+      `;
+
+    }).join("")
+    ||
+    "<p class='muted'>No loans</p>";
 
   chart(
     "loanChart",
@@ -1232,48 +1228,55 @@ function renderLoans() {
     {
       labels:
         loans.map(
-          item =>
-            item["Loan Name"]
+          x =>
+            x["Loan Name"]
         ),
 
       datasets: [
+
         {
-          label: "Initial Amount",
+          label:
+            "Initial Amount",
 
           data:
             loans.map(
-              item =>
+              x =>
                 num(
-                  item["Initial Amount"]
+                  x[
+                    "Initial Amount"
+                  ]
                 )
             )
         },
 
         {
-          label: "Paid",
+          label:
+            "Paid",
 
           data:
-            loans.map(loan =>
+            loans.map(l =>
               emi
-                .filter(item =>
-                  String(
-                    item["Loan ID"]
-                  ) ===
-                  String(loan.ID)
+                .filter(
+                  e =>
+                    String(
+                      e["Loan ID"]
+                    ) ===
+                    String(l.ID)
                 )
                 .reduce(
-                  (sum, item) =>
-                    sum + num(item.Amount),
+                  (s, e) =>
+                    s +
+                    num(e.Amount),
                   0
                 )
             )
         }
+
       ]
     }
   );
 
 }
-
 
 async function addLoan() {
 
@@ -1295,7 +1298,9 @@ async function addLoan() {
           val("loanName"),
 
         "Initial Amount":
-          num(val("loanInitial")),
+          num(
+            val("loanInitial")
+          ),
 
         Remarks:
           val("loanRemarks")
@@ -1308,24 +1313,24 @@ async function addLoan() {
       "loanRemarks"
     ].forEach(id => {
 
-      if ($(id)) {
-        $(id).value = "";
-      }
+      $(id).value = "";
 
     });
 
     renderAll();
 
-    toast("Loan added");
+    toast(
+      "Loan added"
+    );
 
-  } catch (error) {
+  }
+  catch (e) {
 
-    toast(error.message);
+    toast(e.message);
 
   }
 
 }
-
 
 async function addEmi() {
 
@@ -1351,28 +1356,28 @@ async function addEmi() {
           val("emiMonth"),
 
         Amount:
-          num(val("emiAmount")),
+          num(
+            val("emiAmount")
+          ),
 
         Remarks:
           val("emiRemarks")
       }
     );
 
-    if ($("emiAmount")) {
-      $("emiAmount").value = "";
-    }
-
-    if ($("emiRemarks")) {
-      $("emiRemarks").value = "";
-    }
+    $("emiAmount").value = "";
+    $("emiRemarks").value = "";
 
     renderAll();
 
-    toast("EMI saved");
+    toast(
+      "EMI saved"
+    );
 
-  } catch (error) {
+  }
+  catch (e) {
 
-    toast(error.message);
+    toast(e.message);
 
   }
 
@@ -1380,7 +1385,7 @@ async function addEmi() {
 
 
 /* =================================================
-   GIVE / TAKE
+   GIVE & TAKE
 ================================================= */
 
 function renderGive() {
@@ -1391,35 +1396,34 @@ function renderGive() {
   let toReceive = 0;
   let toPay = 0;
 
-
-  rows.forEach(item => {
+  rows.forEach(x => {
 
     const amount =
-      num(item.Amount);
+      num(x.Amount);
 
     if (
-      item.Type ===
+      x.Type ===
       "Pending to Take"
     ) {
       toReceive += amount;
     }
 
     if (
-      item.Type ===
+      x.Type ===
       "Received"
     ) {
       toReceive -= amount;
     }
 
     if (
-      item.Type ===
+      x.Type ===
       "Pending to Pay"
     ) {
       toPay += amount;
     }
 
     if (
-      item.Type ===
+      x.Type ===
       "Paid"
     ) {
       toPay -= amount;
@@ -1427,40 +1431,32 @@ function renderGive() {
 
   });
 
-
-  if ($("giveDash")) {
-
-    $("giveDash").innerHTML =
-      card(
-        "📥 To Receive",
-        fmt(
-          Math.max(
-            0,
-            toReceive
-          )
+  $("giveDash").innerHTML =
+    card(
+      "📥 To Receive",
+      fmt(
+        Math.max(
+          0,
+          toReceive
         )
-      ) +
-      card(
-        "📤 To Pay",
-        fmt(
-          Math.max(
-            0,
-            toPay
-          )
+      )
+    ) +
+    card(
+      "📤 To Pay",
+      fmt(
+        Math.max(
+          0,
+          toPay
         )
-      );
-
-  }
-
+      )
+    );
 
   const persons =
     unique(
       rows.map(
-        item =>
-          item.Person
+        x => x.Person
       )
     );
-
 
   const receiveData =
     persons.map(person => {
@@ -1468,25 +1464,26 @@ function renderGive() {
       let balance = 0;
 
       rows
-        .filter(item =>
-          item.Person === person
+        .filter(
+          x =>
+            x.Person === person
         )
-        .forEach(item => {
+        .forEach(x => {
 
           if (
-            item.Type ===
+            x.Type ===
             "Pending to Take"
           ) {
             balance +=
-              num(item.Amount);
+              num(x.Amount);
           }
 
           if (
-            item.Type ===
+            x.Type ===
             "Received"
           ) {
             balance -=
-              num(item.Amount);
+              num(x.Amount);
           }
 
         });
@@ -1497,7 +1494,6 @@ function renderGive() {
       );
 
     });
-
 
   const payData =
     persons.map(person => {
@@ -1505,25 +1501,26 @@ function renderGive() {
       let balance = 0;
 
       rows
-        .filter(item =>
-          item.Person === person
+        .filter(
+          x =>
+            x.Person === person
         )
-        .forEach(item => {
+        .forEach(x => {
 
           if (
-            item.Type ===
+            x.Type ===
             "Pending to Pay"
           ) {
             balance +=
-              num(item.Amount);
+              num(x.Amount);
           }
 
           if (
-            item.Type ===
+            x.Type ===
             "Paid"
           ) {
             balance -=
-              num(item.Amount);
+              num(x.Amount);
           }
 
         });
@@ -1535,72 +1532,73 @@ function renderGive() {
 
     });
 
+  $("gtList").innerHTML =
+    rows
+      .slice()
+      .sort(
+        (a, b) =>
+          String(b.Date)
+            .localeCompare(
+              String(a.Date)
+            )
+      )
+      .slice(0, 10)
+      .map(x => `
+        <div class="item">
 
-  if ($("gtList")) {
+          <div>
 
-    $("gtList").innerHTML =
-      rows
-        .slice()
-        .sort(
-          (a, b) =>
-            String(b.Date)
-              .localeCompare(
-                String(a.Date)
-              )
-        )
-        .slice(0, 10)
-        .map(item => `
-          <div class="item">
+            <b>
+              ${esc(x.Person)}
+              •
+              ${esc(x.Type)}
+            </b>
 
-            <div>
+            <br>
 
-              <b>
-                ${esc(item.Person)}
-                •
-                ${esc(item.Type)}
-              </b>
+            <small>
 
-              <br>
+              ${esc(x.Date)}
+              •
+              ${esc(
+                x.Purpose || ""
+              )}
 
-              <small>
-                ${esc(item.Date)}
-                •
-                ${esc(item.Purpose || "")}
+              ${
+                x.Notes
+                  ? " • " +
+                    esc(x.Notes)
+                  : ""
+              }
 
-                ${
-                  item.Notes
-                    ? " • " +
-                      esc(item.Notes)
-                    : ""
-                }
-              </small>
-
-            </div>
-
-            <div>
-
-              <b>
-                ${fmt(item.Amount)}
-              </b>
-
-              <br>
-
-              <button
-                class="danger"
-                onclick="del('transactions','${item.ID}')"
-              >
-                Delete
-              </button>
-
-            </div>
+            </small>
 
           </div>
-        `).join("")
-        ||
-        "<p class='muted'>No records</p>";
 
-  }
+          <div>
 
+            <b>
+              ${fmt(x.Amount)}
+            </b>
+
+            <br>
+
+            <button
+              class="danger"
+              onclick="del(
+                'transactions',
+                '${x.ID}'
+              )"
+            >
+              Delete
+            </button>
+
+          </div>
+
+        </div>
+      `).join("")
+      ||
+      "<p class='muted'>No records</p>";
 
   chart(
     "giveChart",
@@ -1609,20 +1607,28 @@ function renderGive() {
       labels: persons,
 
       datasets: [
+
         {
-          label: "To Receive",
-          data: receiveData
+          label:
+            "To Receive",
+
+          data:
+            receiveData
         },
+
         {
-          label: "To Pay",
-          data: payData
+          label:
+            "To Pay",
+
+          data:
+            payData
         }
+
       ]
     }
   );
 
 }
-
 
 async function addGive() {
 
@@ -1647,7 +1653,9 @@ async function addGive() {
           val("gtType"),
 
         Amount:
-          num(val("gtAmount")),
+          num(
+            val("gtAmount")
+          ),
 
         Date:
           val("gtDate") ||
@@ -1668,58 +1676,22 @@ async function addGive() {
       "gtNotes"
     ].forEach(id => {
 
-      if ($(id)) {
-        $(id).value = "";
-      }
+      $(id).value = "";
 
     });
 
     renderAll();
 
-    toast("Saved");
-
-  } catch (error) {
-
-    toast(error.message);
+    toast(
+      "Saved"
+    );
 
   }
+  catch (e) {
 
-}
-
-
-/* =================================================
-   SPLITTER HELPERS
-================================================= */
-
-function parseJSON(
-  value,
-  fallback = []
-) {
-
-  try {
-
-    return typeof value === "string"
-      ? JSON.parse(value)
-      : value || fallback;
-
-  } catch (error) {
-
-    return fallback;
+    toast(e.message);
 
   }
-
-}
-
-
-function groupById(id) {
-
-  return (
-    DB.splitGroups || []
-  ).find(
-    item =>
-      String(item.ID) ===
-      String(id)
-  );
 
 }
 
@@ -1728,176 +1700,189 @@ function groupById(id) {
    SPLITTER
 ================================================= */
 
+function parseJSON(
+  v,
+  fallback = []
+) {
+
+  try {
+
+    return typeof v === "string"
+      ? JSON.parse(v)
+      : v || fallback;
+
+  }
+  catch (e) {
+
+    return fallback;
+
+  }
+
+}
+
+function groupById(id) {
+
+  return (
+    DB.splitGroups ||
+    []
+  ).find(
+    x =>
+      String(x.ID) ===
+      String(id)
+  );
+
+}
+
 function renderSplitter() {
 
   const groups =
     DB.splitGroups || [];
 
-
   [
     "spGroupSel",
     "spGroupExpense"
-  ].forEach(id => {
-
+  ].forEach(id =>
     opt(
       $(id),
       groups,
-      group =>
-        group["Group Name"],
-      group =>
-        group.ID,
+      g =>
+        g["Group Name"],
+      g =>
+        g.ID,
       "Select group"
-    );
+    )
+  );
 
-  });
-
-
-  const groupId =
+  const gid =
     val("spGroupSel") ||
     val("spGroupExpense");
 
-
-  const group =
-    groupById(groupId);
-
+  const g =
+    groupById(gid);
 
   const members =
-    group
+    g
       ? parseJSON(
-          group["Members JSON"],
+          g["Members JSON"],
           []
         )
       : [];
 
-
   opt(
     $("spPaidBy"),
     members,
-    member => member,
-    member => member,
+    x => x,
+    x => x,
     "Paid by"
   );
 
+  $("memberChips").innerHTML =
+    members.map(m => `
+      <span class="chip">
+        ${esc(m)}
+      </span>
+    `).join("");
 
-  if ($("memberChips")) {
-
-    $("memberChips").innerHTML =
-      members
-        .map(member => `
-          <span class="chip">
-            ${esc(member)}
-          </span>
-        `)
-        .join("");
-
-  }
-
-
-  const expenses =
+  const exps =
     (DB.splitExpenses || [])
-      .filter(item =>
-        !groupId ||
-        String(
-          item["Group ID"]
-        ) ===
-        String(groupId)
+      .filter(
+        x =>
+          !gid ||
+          String(
+            x["Group ID"]
+          ) ===
+          String(gid)
       );
 
+  $("splitExpenseList").innerHTML =
+    exps.map(x => `
+      <div class="item">
 
-  if ($("splitExpenseList")) {
+        <div>
 
-    $("splitExpenseList").innerHTML =
-      expenses
-        .map(item => `
-          <div class="item">
+          <b>
+            ${esc(x.Title)}
+          </b>
 
-            <div>
+          <br>
 
-              <b>
-                ${esc(item.Title)}
-              </b>
+          <small>
+            ${esc(x.Date)}
+            • Paid by
+            ${esc(x["Paid By"])}
+          </small>
 
-              <br>
+        </div>
 
-              <small>
-                ${esc(item.Date)}
-                • Paid by
-                ${esc(item["Paid By"])}
-              </small>
+        <div>
 
-            </div>
+          <b>
+            ${fmt(x.Amount)}
+          </b>
 
-            <div>
+          <br>
 
-              <b>
-                ${fmt(item.Amount)}
-              </b>
+          <button
+            class="danger"
+            onclick="del(
+              'splitExpenses',
+              '${x.ID}'
+            )"
+          >
+            Delete
+          </button>
 
-              <br>
+        </div>
 
-              <button
-                class="danger"
-                onclick="del('splitExpenses','${item.ID}')"
-              >
-                Delete
-              </button>
-
-            </div>
-
-          </div>
-        `)
-        .join("")
-        ||
-        "<p class='muted'>No expenses</p>";
-
-  }
-
+      </div>
+    `).join("")
+    ||
+    "<p class='muted'>No expenses</p>";
 
   const balances = {};
 
-  members.forEach(member => {
+  members.forEach(
+    m =>
+      balances[m] = 0
+  );
 
-    balances[member] = 0;
-
-  });
-
-
-  expenses.forEach(expense => {
+  exps.forEach(x => {
 
     const participants =
       parseJSON(
-        expense["Members JSON"],
+        x["Members JSON"],
         members
       );
 
-
     const custom =
       parseJSON(
-        expense["Custom Shares JSON"],
+        x[
+          "Custom Shares JSON"
+        ],
         {}
       );
 
-
     balances[
-      expense["Paid By"]
+      x["Paid By"]
     ] =
       (
         balances[
-          expense["Paid By"]
-        ] || 0
+          x["Paid By"]
+        ] ||
+        0
       ) +
-      num(expense.Amount);
+      num(x.Amount);
 
+    participants.forEach(m => {
 
-    participants.forEach(member => {
-
-      balances[member] =
+      balances[m] =
         (
-          balances[member] || 0
+          balances[m] ||
+          0
         ) -
         (
-          num(custom[member]) ||
-          num(expense.Amount) /
+          num(custom[m]) ||
+          num(x.Amount) /
           Math.max(
             1,
             participants.length
@@ -1908,105 +1893,94 @@ function renderSplitter() {
 
   });
 
+  $("splitSummary").innerHTML =
+    Object
+      .entries(balances)
+      .map(
+        ([m, b]) =>
+          card(
+            m,
+            fmt(b)
+          )
+      )
+      .join("");
 
-  if ($("splitSummary")) {
-
-    $("splitSummary").innerHTML =
-      Object.entries(balances)
-        .map(
-          ([member, balance]) =>
-            card(
-              member,
-              fmt(balance)
-            )
-        )
-        .join("");
-
-  }
-
-
-  if ($("settlementList")) {
-
-    $("settlementList").innerHTML =
-      Object.entries(balances)
-        .filter(
-          ([, balance]) =>
-            Math.abs(balance) > 0.01
-        )
-        .map(
-          ([member, balance]) => `
-            <div class="item">
-
-              <b>
-                ${esc(member)}
-              </b>
-
-              <span>
-                ${
-                  balance > 0
-                    ? "Should receive "
-                    : "Should pay "
-                }
-                ${fmt(Math.abs(balance))}
-              </span>
-
-            </div>
-          `
-        )
-        .join("")
-        ||
-        "<p class='muted'>Select a group</p>";
-
-  }
-
-
-  if ($("splitList")) {
-
-    $("splitList").innerHTML =
-      groups
-        .map(groupItem => `
+  $("settlementList").innerHTML =
+    Object
+      .entries(balances)
+      .filter(
+        ([, b]) =>
+          Math.abs(b) > 0.01
+      )
+      .map(
+        ([m, b]) => `
           <div class="item">
 
-            <div>
+            <b>
+              ${esc(m)}
+            </b>
 
-              <b>
-                ${esc(
-                  groupItem["Group Name"]
-                )}
-              </b>
-
-              <br>
-
-              <small>
-                ${esc(groupItem.Category)}
-                •
-                ${
-                  parseJSON(
-                    groupItem["Members JSON"],
-                    []
-                  )
-                    .map(esc)
-                    .join(", ")
-                }
-              </small>
-
-            </div>
-
-            <button
-              class="danger"
-              onclick="del('splitGroups','${groupItem.ID}')"
-            >
-              Delete
-            </button>
+            <span>
+              ${
+                b > 0
+                  ? "Should receive "
+                  : "Should pay "
+              }
+              ${fmt(
+                Math.abs(b)
+              )}
+            </span>
 
           </div>
-        `)
-        .join("");
+        `
+      )
+      .join("")
+      ||
+      "<p class='muted'>Select a group</p>";
 
-  }
+  $("splitList").innerHTML =
+    groups.map(x => `
+      <div class="item">
+
+        <div>
+
+          <b>
+            ${esc(
+              x["Group Name"]
+            )}
+          </b>
+
+          <br>
+
+          <small>
+            ${esc(x.Category)}
+            •
+            ${
+              parseJSON(
+                x["Members JSON"],
+                []
+              )
+                .map(esc)
+                .join(", ")
+            }
+          </small>
+
+        </div>
+
+        <button
+          class="danger"
+          onclick="del(
+            'splitGroups',
+            '${x.ID}'
+          )"
+        >
+          Delete
+        </button>
+
+      </div>
+    `).join("");
 
 }
-
 
 async function addGroup() {
 
@@ -2018,18 +1992,15 @@ async function addGroup() {
       val("spMembers")
         .split(",")
         .map(
-          item =>
-            item.trim()
+          x => x.trim()
         )
     );
-
 
   if (!name) {
     return toast(
       "Group name required"
     );
   }
-
 
   try {
 
@@ -2054,54 +2025,50 @@ async function addGroup() {
 
     renderAll();
 
-    toast("Group created");
+    toast(
+      "Group created"
+    );
 
-  } catch (error) {
+  }
+  catch (e) {
 
-    toast(error.message);
+    toast(e.message);
 
   }
 
 }
 
-
 async function addMember() {
 
-  const group =
+  const g =
     groupById(
       val("spGroupSel")
     );
 
-  const member =
+  const m =
     val("newMember");
 
-
-  if (
-    !group ||
-    !member
-  ) {
+  if (!g || !m) {
     return toast(
       "Select group and member"
     );
   }
 
-
   const members =
     unique([
       ...parseJSON(
-        group["Members JSON"],
+        g["Members JSON"],
         []
       ),
-      member
+      m
     ]);
-
 
   try {
 
     await save(
       "splitGroups",
       {
-        ...group,
+        ...g,
 
         "Members JSON":
           JSON.stringify(
@@ -2114,83 +2081,80 @@ async function addMember() {
 
     renderAll();
 
-    toast("Member added");
+    toast(
+      "Member added"
+    );
 
-  } catch (error) {
+  }
+  catch (e) {
 
-    toast(error.message);
+    toast(e.message);
 
   }
 
 }
 
-
 async function renameGroup() {
 
-  const group =
+  const g =
     groupById(
       val("spGroupSel")
     );
 
-
-  if (!group) {
+  if (!g) {
     return toast(
       "Select group"
     );
   }
 
-
-  const name =
+  const n =
     prompt(
       "New group name",
-      group["Group Name"]
+      g["Group Name"]
     );
 
-
-  if (!name) {
-    return;
-  }
-
+  if (!n) return;
 
   try {
 
     await save(
       "splitGroups",
       {
-        ...group,
+        ...g,
 
         "Group Name":
-          name
+          n
       }
     );
 
     renderAll();
 
-    toast("Renamed");
+    toast(
+      "Renamed"
+    );
 
-  } catch (error) {
+  }
+  catch (e) {
 
-    toast(error.message);
+    toast(e.message);
 
   }
 
 }
 
-
 async function saveSplitExpense() {
 
-  const groupId =
+  const gid =
     val("spGroupExpense");
 
-  const group =
-    groupById(groupId);
+  const g =
+    groupById(gid);
 
   const amount =
     num(val("spAmount"));
 
-
   if (
-    !group ||
+    !g ||
     !val("spTitle") ||
     !amount ||
     !val("spPaidBy")
@@ -2200,25 +2164,21 @@ async function saveSplitExpense() {
     );
   }
 
-
-  const allMembers =
+  const all =
     parseJSON(
-      group["Members JSON"],
+      g["Members JSON"],
       []
     );
-
 
   const participants =
     unique(
       val("spMembersSel")
         .split(",")
         .map(
-          item =>
-            item.trim()
+          x => x.trim()
         )
         .filter(Boolean)
     );
-
 
   try {
 
@@ -2226,7 +2186,7 @@ async function saveSplitExpense() {
       "splitExpenses",
       {
         "Group ID":
-          groupId,
+          gid,
 
         Title:
           val("spTitle"),
@@ -2241,7 +2201,7 @@ async function saveSplitExpense() {
           JSON.stringify(
             participants.length
               ? participants
-              : allMembers
+              : all
           ),
 
         "Custom Shares JSON":
@@ -2259,19 +2219,20 @@ async function saveSplitExpense() {
       "spMembersSel"
     ].forEach(id => {
 
-      if ($(id)) {
-        $(id).value = "";
-      }
+      $(id).value = "";
 
     });
 
     renderAll();
 
-    toast("Expense saved");
+    toast(
+      "Expense saved"
+    );
 
-  } catch (error) {
+  }
+  catch (e) {
 
-    toast(error.message);
+    toast(e.message);
 
   }
 
@@ -2290,112 +2251,106 @@ function renderInvestments() {
   const assets =
     DB.assets || [];
 
-
   opt(
     $("assetBasket"),
     baskets,
-    basket =>
-      basket["Basket Name"],
-    basket =>
-      basket.ID,
+    b =>
+      b["Basket Name"],
+    b =>
+      b.ID,
     "Select basket"
   );
 
-
   const total =
     assets.reduce(
-      (sum, item) =>
-        sum +
-        num(item["Monthly Amount"]),
+      (s, x) =>
+        s +
+        num(
+          x["Monthly Amount"]
+        ),
       0
     );
 
+  $("investmentDash").innerHTML =
+    card(
+      "Monthly SIP",
+      fmt(total)
+    ) +
+    card(
+      "Assets",
+      assets.length
+    ) +
+    card(
+      "Baskets",
+      baskets.length
+    );
 
-  if ($("investmentDash")) {
+  $("basketList").innerHTML =
+    baskets.map(b => {
 
-    $("investmentDash").innerHTML =
-      card(
-        "Monthly SIP",
-        fmt(total)
-      ) +
-      card(
-        "Assets",
-        assets.length
-      ) +
-      card(
-        "Baskets",
-        baskets.length
-      );
+      const aa =
+        assets.filter(
+          a =>
+            String(
+              a["Basket ID"]
+            ) ===
+            String(b.ID)
+        );
 
-  }
+      return `
+        <div class="item">
 
+          <div>
 
-  if ($("basketList")) {
+            <b>
+              ${esc(
+                b["Basket Name"]
+              )}
+            </b>
 
-    $("basketList").innerHTML =
-      baskets
-        .map(basket => {
+            <br>
 
-          const basketAssets =
-            assets.filter(asset =>
-              String(
-                asset["Basket ID"]
-              ) ===
-              String(basket.ID)
-            );
-
-          return `
-            <div class="item">
-
-              <div>
-
-                <b>
-                  ${esc(
-                    basket["Basket Name"]
-                  )}
-                </b>
-
-                <br>
-
-                <small>
-                  ${
-                    basketAssets
-                      .map(asset =>
-                        esc(
-                          asset["Asset Name"]
-                        ) +
-                        " " +
-                        fmt(
-                          asset[
-                            "Monthly Amount"
-                          ]
-                        )
+            <small>
+              ${
+                aa
+                  .map(
+                    a =>
+                      esc(
+                        a[
+                          "Asset Name"
+                        ]
+                      ) +
+                      " " +
+                      fmt(
+                        a[
+                          "Monthly Amount"
+                        ]
                       )
-                      .join(" • ")
-                    ||
-                    "No assets"
-                  }
-                </small>
+                  )
+                  .join(" • ")
+                ||
+                "No assets"
+              }
+            </small>
 
-              </div>
+          </div>
 
-              <button
-                class="danger"
-                onclick="del('baskets','${basket.ID}')"
-              >
-                Delete
-              </button>
+          <button
+            class="danger"
+            onclick="del(
+              'baskets',
+              '${b.ID}'
+            )"
+          >
+            Delete
+          </button>
 
-            </div>
-          `;
+        </div>
+      `;
 
-        })
-        .join("")
-        ||
-        "<p class='muted'>No baskets</p>";
-
-  }
-
+    }).join("")
+    ||
+    "<p class='muted'>No baskets</p>";
 
   chart(
     "investmentChart",
@@ -2403,17 +2358,21 @@ function renderInvestments() {
     {
       labels:
         assets.map(
-          item =>
-            item["Asset Name"]
+          x =>
+            x[
+              "Asset Name"
+            ]
         ),
 
       datasets: [
         {
           data:
             assets.map(
-              item =>
+              x =>
                 num(
-                  item["Monthly Amount"]
+                  x[
+                    "Monthly Amount"
+                  ]
                 )
             )
         }
@@ -2423,41 +2382,36 @@ function renderInvestments() {
 
 }
 
-
 async function addBasket() {
 
   const person =
     val("sipPerson");
 
-  const basketName =
+  const name =
     val("sipBasket");
 
-
-  if (!basketName) {
+  if (!name) {
     return toast(
       "Basket name required"
     );
   }
 
-
   try {
 
-    let personRecord =
+    let p =
       (DB.people || [])
-        .find(item =>
-          String(
-            item.Name
-          ).toLowerCase() ===
-          person.toLowerCase()
+        .find(
+          x =>
+            String(x.Name)
+              .toLowerCase() ===
+            person.toLowerCase()
         );
-
 
     if (
       person &&
-      !personRecord
+      !p
     ) {
-
-      personRecord =
+      p =
         await save(
           "people",
           {
@@ -2465,51 +2419,49 @@ async function addBasket() {
               person
           }
         );
-
     }
-
 
     await save(
       "baskets",
       {
         "Person ID":
-          personRecord?.ID || "",
+          p?.ID || "",
 
         "Basket Name":
-          basketName
+          name
       }
     );
 
-
-    if ($("sipBasket")) {
-      $("sipBasket").value = "";
-    }
+    $("sipBasket").value = "";
 
     renderAll();
 
-    toast("Basket created");
+    toast(
+      "Basket created"
+    );
 
-  } catch (error) {
+  }
+  catch (e) {
 
-    toast(error.message);
+    toast(e.message);
 
   }
 
 }
-
 
 async function addAsset() {
 
   if (
     !val("assetBasket") ||
     !val("assetName") ||
-    !num(val("assetAmount"))
+    !num(
+      val("assetAmount")
+    )
   ) {
     return toast(
       "Select basket, asset and amount"
     );
   }
-
 
   try {
 
@@ -2537,19 +2489,20 @@ async function addAsset() {
       "assetAmount"
     ].forEach(id => {
 
-      if ($(id)) {
-        $(id).value = "";
-      }
+      $(id).value = "";
 
     });
 
     renderAll();
 
-    toast("Asset saved");
+    toast(
+      "Asset saved"
+    );
 
-  } catch (error) {
+  }
+  catch (e) {
 
-    toast(error.message);
+    toast(e.message);
 
   }
 
@@ -2560,59 +2513,42 @@ async function addAsset() {
    VEHICLE HELPERS
 ================================================= */
 
-function displayDate(value) {
-
-  if (!value) {
-    return "";
-  }
-
-  const stringValue =
-    String(value);
-
-  if (
-    stringValue.includes("T")
-  ) {
-    return stringValue.slice(0, 10);
-  }
-
-  return stringValue;
-
-}
-
-
 function vehicleName(id) {
 
   return (
-    DB.vehicles || []
+    DB.vehicles ||
+    []
   ).find(
-    vehicle =>
-      String(vehicle.ID) ===
+    v =>
+      String(v.ID) ===
       String(id)
-  )?.["Vehicle Name"] ||
+  )?.["Vehicle Name"]
+  ||
   "Vehicle";
 
 }
 
 
 /*
-  Get fuel records in chronological order.
+  Sort fuel records correctly.
 
-  IMPORTANT:
   Date is primary sorting.
   Odometer is secondary sorting.
 */
 
-function getVehicleFuelRecords(vehicleId) {
+function fuelRecords(vehicleId) {
 
-  return (DB.fuel || [])
+  return (
+    DB.fuel ||
+    []
+  )
     .filter(
-      record =>
+      x =>
         String(
-          record["Vehicle ID"]
+          x["Vehicle ID"]
         ) ===
         String(vehicleId)
     )
-    .slice()
     .sort((a, b) => {
 
       const dateCompare =
@@ -2621,9 +2557,7 @@ function getVehicleFuelRecords(vehicleId) {
             String(b.Date || "")
           );
 
-      if (
-        dateCompare !== 0
-      ) {
+      if (dateCompare !== 0) {
         return dateCompare;
       }
 
@@ -2638,135 +2572,13 @@ function getVehicleFuelRecords(vehicleId) {
 
 
 /*
-  Previous fuel entry before a specific record.
+  Latest odometer.
 */
-
-function previousFuelRecord(record) {
-
-  const records =
-    getVehicleFuelRecords(
-      record["Vehicle ID"]
-    );
-
-  const index =
-    records.findIndex(
-      item =>
-        String(item.ID) ===
-        String(record.ID)
-    );
-
-  if (index <= 0) {
-    return null;
-  }
-
-  return records[index - 1];
-
-}
-
-
-/*
-  Calculate distance travelled between
-  previous and current odometer.
-*/
-
-function fuelDistance(record) {
-
-  const previous =
-    previousFuelRecord(record);
-
-  if (!previous) {
-    return null;
-  }
-
-  const currentOdo =
-    num(record.Odometer);
-
-  const previousOdo =
-    num(previous.Odometer);
-
-  const distance =
-    currentOdo -
-    previousOdo;
-
-  if (
-    distance < 0 ||
-    !currentOdo ||
-    !previousOdo
-  ) {
-    return null;
-  }
-
-  return distance;
-
-}
-
-
-/*
-  Calculate approximate mileage.
-
-  Distance between previous and current fill
-  divided by previous fuel quantity.
-
-  This gives the fuel efficiency for the fuel
-  consumed since the previous fill.
-*/
-
-function fuelMileage(record) {
-
-  const previous =
-    previousFuelRecord(record);
-
-  const distance =
-    fuelDistance(record);
-
-  if (
-    !previous ||
-    distance === null
-  ) {
-    return null;
-  }
-
-  const previousQuantity =
-    num(previous.Quantity);
-
-  if (
-    previousQuantity <= 0
-  ) {
-    return null;
-  }
-
-  return (
-    distance /
-    previousQuantity
-  );
-
-}
-
-
-function recentRecords(
-  array,
-  limit = 10
-) {
-
-  return [...array]
-    .sort(
-      (a, b) =>
-        String(b.Date || "")
-          .localeCompare(
-            String(a.Date || "")
-          )
-    )
-    .slice(0, limit);
-
-}
-
 
 function latestFuelOdometer(vehicleId) {
 
   const records =
-    getVehicleFuelRecords(
-      vehicleId
-    );
+    fuelRecords(vehicleId);
 
   if (!records.length) {
     return 0;
@@ -2774,10 +2586,380 @@ function latestFuelOdometer(vehicleId) {
 
   return Math.max(
     ...records.map(
-      record =>
-        num(record.Odometer)
+      x =>
+        num(x.Odometer)
     )
   );
+
+}
+
+
+/*
+  Get last fuel entry before adding
+  a new fuel entry.
+*/
+
+function lastFuelRecord(vehicleId) {
+
+  const records =
+    fuelRecords(vehicleId);
+
+  if (!records.length) {
+    return null;
+  }
+
+  return records[
+    records.length - 1
+  ];
+
+}
+
+
+/*
+  Calculate distance for each fuel entry.
+
+  First entry has no previous reading.
+*/
+
+function fuelDistance(
+  record,
+  vehicleId
+) {
+
+  const records =
+    fuelRecords(vehicleId);
+
+  const index =
+    records.findIndex(
+      x =>
+        String(x.ID) ===
+        String(record.ID)
+    );
+
+  if (index <= 0) {
+    return 0;
+  }
+
+  const previous =
+    records[index - 1];
+
+  const distance =
+    num(record.Odometer) -
+    num(previous.Odometer);
+
+  return Math.max(
+    0,
+    distance
+  );
+
+}
+
+
+/*
+  Full vehicle performance statistics.
+*/
+
+function vehicleStats(vehicle) {
+
+  const records =
+    fuelRecords(vehicle.ID);
+
+  const currentKM =
+    records.length
+      ? Math.max(
+          ...records.map(
+            x =>
+              num(x.Odometer)
+          )
+        )
+      : 0;
+
+  let totalDistance = 0;
+
+  const distances = [];
+
+  records.forEach(
+    (record, index) => {
+
+      if (index === 0) return;
+
+      const previous =
+        records[index - 1];
+
+      const distance =
+        num(record.Odometer) -
+        num(previous.Odometer);
+
+      if (distance > 0) {
+
+        totalDistance +=
+          distance;
+
+        distances.push(
+          distance
+        );
+
+      }
+
+    }
+  );
+
+
+  /*
+    Fuel quantity calculation.
+
+    First fill is ignored for mileage because
+    there was no distance interval before it.
+  */
+
+  const validFuelRecords =
+    records.slice(1);
+
+  const totalFuel =
+    validFuelRecords.reduce(
+      (s, x) =>
+        s +
+        num(x.Quantity),
+      0
+    );
+
+  const totalCost =
+    records.reduce(
+      (s, x) =>
+        s +
+        num(x.Amount),
+      0
+    );
+
+  const averageKMPerFill =
+    distances.length
+      ? totalDistance /
+        distances.length
+      : 0;
+
+  const mileage =
+    totalFuel > 0
+      ? totalDistance /
+        totalFuel
+      : 0;
+
+  const last =
+    records.length
+      ? records[
+          records.length - 1
+        ]
+      : null;
+
+  return {
+
+    records,
+
+    currentKM,
+
+    totalDistance,
+
+    totalFuel,
+
+    totalCost,
+
+    fuelEntries:
+      records.length,
+
+    intervals:
+      distances.length,
+
+    averageKMPerFill,
+
+    mileage,
+
+    lastDate:
+      last
+        ? displayDate(last.Date)
+        : ""
+
+  };
+
+}
+
+
+/* =================================================
+   VEHICLE PERFORMANCE DASHBOARD CARD
+================================================= */
+
+function vehiclePerformanceCard(vehicle) {
+
+  const s =
+    vehicleStats(vehicle);
+
+  const icon =
+    String(
+      vehicle["Vehicle Type"] ||
+      ""
+    )
+      .toLowerCase()
+      .includes("bike")
+        ? "🏍️"
+        : "🚗";
+
+  return `
+    <div class="maintenance-card">
+
+      <h3>
+        ${icon}
+        ${esc(
+          vehicle[
+            "Vehicle Name"
+          ]
+        )}
+      </h3>
+
+      <div class="maint-row">
+
+        <span>
+          Current Odometer
+        </span>
+
+        <b>
+          ${
+            s.currentKM
+              ? s.currentKM
+                  .toLocaleString(
+                    "en-IN"
+                  ) +
+                " km"
+              : "—"
+          }
+        </b>
+
+      </div>
+
+      <div class="maint-row">
+
+        <span>
+          Fuel Entries
+        </span>
+
+        <b>
+          ${s.fuelEntries}
+        </b>
+
+      </div>
+
+      <hr>
+
+      <div class="maint-section-title">
+        📏 Distance
+      </div>
+
+      <div class="maint-row">
+
+        <span>
+          Total KM Travelled
+        </span>
+
+        <b>
+          ${s.totalDistance
+            .toLocaleString(
+              "en-IN"
+            )} km
+        </b>
+
+      </div>
+
+      <div class="maint-row">
+
+        <span>
+          Avg KM / Fuel Fill
+        </span>
+
+        <b>
+          ${
+            s.averageKMPerFill
+              ? s.averageKMPerFill
+                  .toFixed(1)
+              : "—"
+          }
+          ${
+            s.averageKMPerFill
+              ? " km"
+              : ""
+          }
+        </b>
+
+      </div>
+
+      <hr>
+
+      <div class="maint-section-title">
+        ⛽ Fuel Performance
+      </div>
+
+      <div class="maint-row">
+
+        <span>
+          Fuel Used
+        </span>
+
+        <b>
+          ${s.totalFuel.toFixed(2)}
+          L
+        </b>
+
+      </div>
+
+      <div class="maint-row">
+
+        <span>
+          Average Mileage
+        </span>
+
+        <b class="good-km">
+          ${
+            s.mileage
+              ? s.mileage
+                  .toFixed(2)
+              : "—"
+          }
+          ${
+            s.mileage
+              ? " km/L"
+              : ""
+          }
+        </b>
+
+      </div>
+
+      <hr>
+
+      <div class="maint-row">
+
+        <span>
+          Total Fuel Cost
+        </span>
+
+        <b>
+          ${fmt(s.totalCost)}
+        </b>
+
+      </div>
+
+      <div class="maint-row">
+
+        <span>
+          Last Fuel Date
+        </span>
+
+        <b>
+          ${
+            s.lastDate ||
+            "—"
+          }
+        </b>
+
+      </div>
+
+    </div>
+  `;
 
 }
 
@@ -2802,14 +2984,13 @@ function getMaintenanceRecord(
           "servicing"
         ];
 
-
   const records =
     (DB.maintenance || [])
-      .filter(record => {
+      .filter(x => {
 
         if (
           String(
-            record["Vehicle ID"]
+            x["Vehicle ID"]
           ) !==
           String(vehicleId)
         ) {
@@ -2818,27 +2999,23 @@ function getMaintenanceRecord(
 
         const category =
           String(
-            record.Category || ""
+            x.Category || ""
           ).toLowerCase();
 
         return keywords.some(
-          keyword =>
-            category.includes(
-              keyword
-            )
+          k =>
+            category.includes(k)
         );
 
       })
       .sort((a, b) => {
 
-        const kmDifference =
+        const kmDiff =
           num(b.Odometer) -
           num(a.Odometer);
 
-        if (
-          kmDifference !== 0
-        ) {
-          return kmDifference;
+        if (kmDiff !== 0) {
+          return kmDiff;
         }
 
         return String(
@@ -2851,19 +3028,18 @@ function getMaintenanceRecord(
 
       });
 
-
   return records[0] || null;
 
 }
-
 
 function getServiceInterval(vehicle) {
 
   const type =
     String(
-      vehicle["Vehicle Type"] || ""
+      vehicle[
+        "Vehicle Type"
+      ] || ""
     ).toLowerCase();
-
 
   if (
     type.includes("bike") ||
@@ -2876,11 +3052,6 @@ function getServiceInterval(vehicle) {
   return 10000;
 
 }
-
-
-/* =================================================
-   MAINTENANCE CARD
-================================================= */
 
 function maintenanceCard(vehicle) {
 
@@ -2897,7 +3068,6 @@ function maintenanceCard(vehicle) {
       vehicleId
     );
 
-
   const lastOil =
     getMaintenanceRecord(
       vehicleId,
@@ -2910,7 +3080,6 @@ function maintenanceCard(vehicle) {
       "service"
     );
 
-
   const lastOilKM =
     lastOil
       ? num(lastOil.Odometer)
@@ -2918,21 +3087,22 @@ function maintenanceCard(vehicle) {
 
   const lastServiceKM =
     lastService
-      ? num(lastService.Odometer)
+      ? num(
+          lastService.Odometer
+        )
       : 0;
-
 
   const nextOilTarget =
     lastOilKM > 0
-      ? lastOilKM + interval
+      ? lastOilKM +
+        interval
       : 0;
-
 
   const nextServiceTarget =
     lastServiceKM > 0
-      ? lastServiceKM + interval
+      ? lastServiceKM +
+        interval
       : 0;
-
 
   const oilRemaining =
     nextOilTarget > 0
@@ -2940,13 +3110,11 @@ function maintenanceCard(vehicle) {
         currentKM
       : 0;
 
-
   const serviceRemaining =
     nextServiceTarget > 0
       ? nextServiceTarget -
         currentKM
       : 0;
-
 
   const oilClass =
     oilRemaining <= 0 &&
@@ -2956,7 +3124,6 @@ function maintenanceCard(vehicle) {
         ? "warning-km"
         : "good-km";
 
-
   const serviceClass =
     serviceRemaining <= 0 &&
     nextServiceTarget > 0
@@ -2965,27 +3132,28 @@ function maintenanceCard(vehicle) {
         ? "warning-km"
         : "good-km";
 
+  const icon =
+    String(
+      vehicle[
+        "Vehicle Type"
+      ] || ""
+    )
+      .toLowerCase()
+      .includes("bike")
+        ? "🏍️"
+        : "🚗";
 
   return `
     <div class="maintenance-card">
 
       <h3>
-        ${
-          String(
-            vehicle["Vehicle Type"] ||
-            ""
-          )
-            .toLowerCase()
-            .includes("bike")
-            ? "🏍️"
-            : "🚗"
-        }
-
+        ${icon}
         ${esc(
-          vehicle["Vehicle Name"]
+          vehicle[
+            "Vehicle Name"
+          ]
         )}
       </h3>
-
 
       <div class="maint-row">
 
@@ -2996,23 +3164,22 @@ function maintenanceCard(vehicle) {
         <b>
           ${
             currentKM
-              ? currentKM.toLocaleString(
-                  "en-IN"
-                ) + " km"
+              ? currentKM
+                  .toLocaleString(
+                    "en-IN"
+                  ) +
+                " km"
               : "—"
           }
         </b>
 
       </div>
 
-
       <hr>
-
 
       <div class="maint-section-title">
         🛢️ Oil Change
       </div>
-
 
       <div class="maint-row">
 
@@ -3027,16 +3194,16 @@ function maintenanceCard(vehicle) {
                   lastOil.Date
                 ) +
                 " · " +
-                lastOilKM.toLocaleString(
-                  "en-IN"
-                ) +
+                lastOilKM
+                  .toLocaleString(
+                    "en-IN"
+                  ) +
                 " km"
               : "No record"
           }
         </b>
 
       </div>
-
 
       <div class="maint-row">
 
@@ -3047,15 +3214,16 @@ function maintenanceCard(vehicle) {
         <b>
           ${
             nextOilTarget
-              ? nextOilTarget.toLocaleString(
-                  "en-IN"
-                ) + " km"
+              ? nextOilTarget
+                  .toLocaleString(
+                    "en-IN"
+                  ) +
+                " km"
               : "—"
           }
         </b>
 
       </div>
-
 
       <div class="maint-row">
 
@@ -3069,14 +3237,17 @@ function maintenanceCard(vehicle) {
             nextOilTarget
               ? (
                   oilRemaining >= 0
-                    ? oilRemaining.toLocaleString(
-                        "en-IN"
-                      ) + " km"
+                    ? oilRemaining
+                        .toLocaleString(
+                          "en-IN"
+                        ) +
+                      " km"
                     : Math.abs(
                         oilRemaining
-                      ).toLocaleString(
-                        "en-IN"
-                      ) +
+                      )
+                        .toLocaleString(
+                          "en-IN"
+                        ) +
                       " km overdue"
                 )
               : "—"
@@ -3086,14 +3257,11 @@ function maintenanceCard(vehicle) {
 
       </div>
 
-
       <hr>
-
 
       <div class="maint-section-title">
         🔧 Service
       </div>
-
 
       <div class="maint-row">
 
@@ -3102,22 +3270,24 @@ function maintenanceCard(vehicle) {
         </span>
 
         <b>
+
           ${
             lastService
               ? displayDate(
                   lastService.Date
                 ) +
                 " · " +
-                lastServiceKM.toLocaleString(
-                  "en-IN"
-                ) +
+                lastServiceKM
+                  .toLocaleString(
+                    "en-IN"
+                  ) +
                 " km"
               : "No record"
           }
+
         </b>
 
       </div>
-
 
       <div class="maint-row">
 
@@ -3126,17 +3296,20 @@ function maintenanceCard(vehicle) {
         </span>
 
         <b>
+
           ${
             nextServiceTarget
-              ? nextServiceTarget.toLocaleString(
-                  "en-IN"
-                ) + " km"
+              ? nextServiceTarget
+                  .toLocaleString(
+                    "en-IN"
+                  ) +
+                " km"
               : "—"
           }
+
         </b>
 
       </div>
-
 
       <div class="maint-row">
 
@@ -3150,14 +3323,17 @@ function maintenanceCard(vehicle) {
             nextServiceTarget
               ? (
                   serviceRemaining >= 0
-                    ? serviceRemaining.toLocaleString(
-                        "en-IN"
-                      ) + " km"
+                    ? serviceRemaining
+                        .toLocaleString(
+                          "en-IN"
+                        ) +
+                      " km"
                     : Math.abs(
                         serviceRemaining
-                      ).toLocaleString(
-                        "en-IN"
-                      ) +
+                      )
+                        .toLocaleString(
+                          "en-IN"
+                        ) +
                       " km overdue"
                 )
               : "—"
@@ -3167,18 +3343,18 @@ function maintenanceCard(vehicle) {
 
       </div>
 
-
       <div class="maintenance-interval">
 
         ${
           String(
-            vehicle["Vehicle Type"] ||
-            ""
+            vehicle[
+              "Vehicle Type"
+            ] || ""
           )
             .toLowerCase()
             .includes("bike")
-            ? "Oil Change & Service every 3,000 km"
-            : "Oil Change & Service every 10,000 km"
+              ? "Oil Change & Service every 3,000 km"
+              : "Oil Change & Service every 10,000 km"
         }
 
       </div>
@@ -3190,7 +3366,7 @@ function maintenanceCard(vehicle) {
 
 
 /* =================================================
-   VEHICLES
+   VEHICLE RENDER
 ================================================= */
 
 function renderVehicles() {
@@ -3198,30 +3374,25 @@ function renderVehicles() {
   const vehicles =
     DB.vehicles || [];
 
-
   const type =
     val("vehicleTypeFilter");
 
-  const vehicleId =
+  const vid =
     val("vehicleFilter");
 
 
   opt(
     $("vehicleFilter"),
-
     vehicles.filter(
-      vehicle =>
+      v =>
         !type ||
-        vehicle["Vehicle Type"] ===
+        v["Vehicle Type"] ===
         type
     ),
-
-    vehicle =>
-      vehicle["Vehicle Name"],
-
-    vehicle =>
-      vehicle.ID,
-
+    v =>
+      v["Vehicle Name"],
+    v =>
+      v.ID,
     "All Vehicles"
   );
 
@@ -3229,88 +3400,113 @@ function renderVehicles() {
   [
     "fuelVehicle",
     "maintVehicle"
-  ].forEach(id => {
-
+  ].forEach(id =>
     opt(
       $(id),
-
       vehicles,
-
-      vehicle =>
-        vehicle["Vehicle Name"],
-
-      vehicle =>
-        vehicle.ID,
-
+      v =>
+        v["Vehicle Name"],
+      v =>
+        v.ID,
       "Select vehicle"
-    );
-
-  });
+    )
+  );
 
 
   const fuels =
     (DB.fuel || [])
-      .filter(record =>
-        !vehicleId ||
-        String(
-          record["Vehicle ID"]
-        ) ===
-        String(vehicleId)
+      .filter(
+        x =>
+          !vid ||
+          String(
+            x["Vehicle ID"]
+          ) ===
+          String(vid)
       );
 
-
-  const maintenance =
+  const maint =
     (DB.maintenance || [])
-      .filter(record =>
-        !vehicleId ||
-        String(
-          record["Vehicle ID"]
-        ) ===
-        String(vehicleId)
+      .filter(
+        x =>
+          !vid ||
+          String(
+            x["Vehicle ID"]
+          ) ===
+          String(vid)
       );
 
 
-  const fuelCost =
+  const fcost =
     fuels.reduce(
-      (sum, record) =>
-        sum + num(record.Amount),
+      (s, x) =>
+        s +
+        num(x.Amount),
+      0
+    );
+
+  const mcost =
+    maint.reduce(
+      (s, x) =>
+        s +
+        num(x.Amount),
       0
     );
 
 
-  const maintenanceCost =
-    maintenance.reduce(
-      (sum, record) =>
-        sum + num(record.Amount),
-      0
+  $("vehicleDash").innerHTML =
+    card(
+      "Fuel Cost",
+      fmt(fcost)
+    ) +
+    card(
+      "Maintenance Cost",
+      fmt(mcost)
+    ) +
+    card(
+      "Total Cost",
+      fmt(
+        fcost +
+        mcost
+      )
     );
 
 
-  if ($("vehicleDash")) {
+  /*
+    VEHICLE PERFORMANCE DASHBOARD
+  */
 
-    $("vehicleDash").innerHTML =
-      card(
-        "Fuel Cost",
-        fmt(fuelCost)
-      ) +
-      card(
-        "Maintenance Cost",
-        fmt(maintenanceCost)
-      ) +
-      card(
-        "Total Cost",
-        fmt(
-          fuelCost +
-          maintenanceCost
-        )
-      );
-
-  }
+  const selectedVehicles =
+    vehicles.filter(
+      v =>
+        !vid ||
+        String(v.ID) ===
+        String(vid)
+    );
 
 
-  /* ===============================
-     RECENT FUEL
-  =============================== */
+  $("vehiclePerformanceDashboard").innerHTML =
+    selectedVehicles
+      .map(
+        vehiclePerformanceCard
+      )
+      .join("");
+
+
+  /*
+    MAINTENANCE DASHBOARD
+  */
+
+  $("vehicleMaintenanceSummary").innerHTML =
+    selectedVehicles
+      .map(
+        maintenanceCard
+      )
+      .join("");
+
+
+  /*
+    FUEL HISTORY
+  */
 
   const recentFuel =
     recentRecords(
@@ -3319,162 +3515,17 @@ function renderVehicles() {
     );
 
 
-  if ($("fuelList")) {
+  $("fuelList").innerHTML =
+    recentFuel
+      .map(x => {
 
-    $("fuelList").innerHTML =
-      recentFuel
-        .map(record => {
+        const distance =
+          fuelDistance(
+            x,
+            x["Vehicle ID"]
+          );
 
-          const previous =
-            previousFuelRecord(
-              record
-            );
-
-          const distance =
-            fuelDistance(
-              record
-            );
-
-          const mileage =
-            fuelMileage(
-              record
-            );
-
-
-          return `
-            <div class="item">
-
-              <div>
-
-                <b>
-                  ${esc(
-                    vehicleName(
-                      record["Vehicle ID"]
-                    )
-                  )}
-                </b>
-
-                <br>
-
-                <small>
-
-                  ${displayDate(
-                    record.Date
-                  )}
-
-                  •
-                  ODO:
-                  ${num(
-                    record.Odometer
-                  ).toLocaleString(
-                    "en-IN"
-                  )} km
-
-                  ${
-                    previous
-                      ? `
-                        <br>
-                        Previous ODO:
-                        ${num(
-                          previous.Odometer
-                        ).toLocaleString(
-                          "en-IN"
-                        )} km
-                      `
-                      : ""
-                  }
-
-                  ${
-                    distance !== null
-                      ? `
-                        <br>
-                        🛣️ Distance:
-                        <b>
-                          ${distance.toLocaleString(
-                            "en-IN"
-                          )} km
-                        </b>
-                      `
-                      : `
-                        <br>
-                        🛣️ Distance:
-                        First fuel record
-                      `
-                  }
-
-                  ${
-                    mileage !== null &&
-                    isFinite(mileage)
-                      ? `
-                        <br>
-                        ⛽ Mileage:
-                        <b>
-                          ${mileage.toFixed(
-                            2
-                          )} km/L
-                        </b>
-                      `
-                      : ""
-                  }
-
-                  <br>
-
-                  ⛽
-                  ${num(
-                    record.Quantity
-                  )} L
-
-                </small>
-
-              </div>
-
-
-              <div>
-
-                <b>
-                  ${fmt(
-                    record.Amount
-                  )}
-                </b>
-
-                <br>
-
-                <button
-                  class="danger"
-                  onclick="del('fuel','${record.ID}')"
-                >
-                  Delete
-                </button>
-
-              </div>
-
-            </div>
-          `;
-
-        })
-        .join("")
-        ||
-        "<p class='muted'>No recent fuel entries</p>";
-
-  }
-
-
-  /* ===============================
-     RECENT MAINTENANCE
-  =============================== */
-
-  const recentMaintenance =
-    recentRecords(
-      maintenance,
-      10
-    );
-
-
-  if ($("maintenanceList")) {
-
-    $("maintenanceList").innerHTML =
-      recentMaintenance
-        .map(record => `
+        return `
           <div class="item">
 
             <div>
@@ -3482,14 +3533,8 @@ function renderVehicles() {
               <b>
                 ${esc(
                   vehicleName(
-                    record["Vehicle ID"]
+                    x["Vehicle ID"]
                   )
-                )}
-
-                •
-
-                ${esc(
-                  record.Category
                 )}
               </b>
 
@@ -3498,35 +3543,42 @@ function renderVehicles() {
               <small>
 
                 ${displayDate(
-                  record.Date
+                  x.Date
                 )}
 
                 •
                 ${num(
-                  record.Odometer
-                ).toLocaleString(
-                  "en-IN"
-                )} km
+                  x.Odometer
+                )
+                  .toLocaleString(
+                    "en-IN"
+                  )} km
 
+                •
                 ${
-                  record.Remarks
-                    ? " • " +
-                      esc(
-                        record.Remarks
-                      )
-                    : ""
+                  distance
+                    ? distance
+                        .toLocaleString(
+                          "en-IN"
+                        ) +
+                      " km travelled"
+                    : "First fuel entry"
                 }
+
+                •
+                ${num(
+                  x.Quantity
+                )} L
 
               </small>
 
             </div>
 
-
             <div>
 
               <b>
                 ${fmt(
-                  record.Amount
+                  x.Amount
                 )}
               </b>
 
@@ -3534,7 +3586,10 @@ function renderVehicles() {
 
               <button
                 class="danger"
-                onclick="del('maintenance','${record.ID}')"
+                onclick="del(
+                  'fuel',
+                  '${x.ID}'
+                )"
               >
                 Delete
               </button>
@@ -3542,52 +3597,116 @@ function renderVehicles() {
             </div>
 
           </div>
-        `)
-        .join("")
-        ||
-        "<p class='muted'>No recent maintenance entries</p>";
+        `;
 
-  }
+      })
+      .join("")
+      ||
+      "<p class='muted'>No recent fuel entries</p>";
 
 
-  /* ===============================
-     MAINTENANCE SUMMARY
-  =============================== */
+  /*
+    MAINTENANCE HISTORY
+  */
 
-  const selectedVehicles =
-    vehicles.filter(vehicle =>
-      !vehicleId ||
-      String(vehicle.ID) ===
-      String(vehicleId)
+  const recentMaintenance =
+    recentRecords(
+      maint,
+      10
     );
 
 
-  if ($("vehicleMaintenanceSummary")) {
+  $("maintenanceList").innerHTML =
+    recentMaintenance
+      .map(x => `
+        <div class="item">
 
-    $("vehicleMaintenanceSummary").innerHTML =
-      selectedVehicles
-        .map(
-          maintenanceCard
-        )
-        .join("");
+          <div>
 
-  }
+            <b>
+
+              ${esc(
+                vehicleName(
+                  x["Vehicle ID"]
+                )
+              )}
+
+              •
+              ${esc(x.Category)}
+
+            </b>
+
+            <br>
+
+            <small>
+
+              ${displayDate(
+                x.Date
+              )}
+
+              •
+              ${num(
+                x.Odometer
+              )
+                .toLocaleString(
+                  "en-IN"
+                )} km
+
+              ${
+                x.Remarks
+                  ? " • " +
+                    esc(
+                      x.Remarks
+                    )
+                  : ""
+              }
+
+            </small>
+
+          </div>
+
+          <div>
+
+            <b>
+              ${fmt(
+                x.Amount
+              )}
+            </b>
+
+            <br>
+
+            <button
+              class="danger"
+              onclick="del(
+                'maintenance',
+                '${x.ID}'
+              )"
+            >
+              Delete
+            </button>
+
+          </div>
+
+        </div>
+      `)
+      .join("")
+      ||
+      "<p class='muted'>No recent maintenance entries</p>";
 
 
-  /* ===============================
-     FUEL SUMMARY CHART
-  =============================== */
+  /*
+    CHARTS
+  */
 
   const chartVehicles =
     selectedVehicles.length
       ? selectedVehicles
       : vehicles;
 
-
   const labels =
     chartVehicles.map(
-      vehicle =>
-        vehicle["Vehicle Name"]
+      v =>
+        v["Vehicle Name"]
     );
 
 
@@ -3603,30 +3722,30 @@ function renderVehicles() {
             "Fuel Cost",
 
           data:
-            chartVehicles.map(vehicle =>
-              (DB.fuel || [])
-                .filter(record =>
-                  String(
-                    record["Vehicle ID"]
-                  ) ===
-                  String(vehicle.ID)
-                )
-                .reduce(
-                  (sum, record) =>
-                    sum +
-                    num(record.Amount),
-                  0
-                )
+            chartVehicles.map(
+              v =>
+                (DB.fuel || [])
+                  .filter(
+                    x =>
+                      String(
+                        x[
+                          "Vehicle ID"
+                        ]
+                      ) ===
+                      String(v.ID)
+                  )
+                  .reduce(
+                    (s, x) =>
+                      s +
+                      num(x.Amount),
+                    0
+                  )
             )
         }
       ]
     }
   );
 
-
-  /* ===============================
-     MAINTENANCE CHART
-  =============================== */
 
   chart(
     "maintenanceChart",
@@ -3640,20 +3759,24 @@ function renderVehicles() {
             "Maintenance Cost",
 
           data:
-            chartVehicles.map(vehicle =>
-              (DB.maintenance || [])
-                .filter(record =>
-                  String(
-                    record["Vehicle ID"]
-                  ) ===
-                  String(vehicle.ID)
-                )
-                .reduce(
-                  (sum, record) =>
-                    sum +
-                    num(record.Amount),
-                  0
-                )
+            chartVehicles.map(
+              v =>
+                (DB.maintenance || [])
+                  .filter(
+                    x =>
+                      String(
+                        x[
+                          "Vehicle ID"
+                        ]
+                      ) ===
+                      String(v.ID)
+                  )
+                  .reduce(
+                    (s, x) =>
+                      s +
+                      num(x.Amount),
+                    0
+                  )
             )
         }
       ]
@@ -3664,7 +3787,82 @@ function renderVehicles() {
 
 
 /* =================================================
-   ADD VEHICLE
+   FUEL INPUT AUTO CALCULATION
+================================================= */
+
+function updateFuelPreviousOdometer() {
+
+  const vehicleId =
+    val("fuelVehicle");
+
+  const previous =
+    lastFuelRecord(
+      vehicleId
+    );
+
+  const previousKM =
+    previous
+      ? num(
+          previous.Odometer
+        )
+      : 0;
+
+  $("fuelLastOdo").value =
+    previousKM || "";
+
+  $("fuelOdo").value = "";
+
+  $("fuelDistance").value = "";
+
+}
+
+function calculateFuelDistance() {
+
+  const previous =
+    num(
+      val("fuelLastOdo")
+    );
+
+  const current =
+    num(
+      val("fuelOdo")
+    );
+
+  if (
+    !current ||
+    !previous
+  ) {
+
+    $("fuelDistance").value = "";
+
+    return;
+
+  }
+
+  const distance =
+    current -
+    previous;
+
+  if (distance < 0) {
+
+    $("fuelDistance").value = "";
+
+    toast(
+      "Current odometer cannot be less than previous odometer"
+    );
+
+    return;
+
+  }
+
+  $("fuelDistance").value =
+    distance;
+
+}
+
+
+/* =================================================
+   VEHICLE SAVE FUNCTIONS
 ================================================= */
 
 async function addVehicle() {
@@ -3672,13 +3870,11 @@ async function addVehicle() {
   const name =
     val("vehicleName");
 
-
   if (!name) {
     return toast(
       "Vehicle name required"
     );
   }
-
 
   try {
 
@@ -3697,39 +3893,31 @@ async function addVehicle() {
       }
     );
 
-
     [
       "vehicleName",
       "vehiclePlate"
     ].forEach(id => {
 
-      if ($(id)) {
-        $(id).value = "";
-      }
+      $(id).value = "";
 
     });
 
-
     renderAll();
 
-    toast("Vehicle added");
+    toast(
+      "Vehicle added"
+    );
 
-  } catch (error) {
+  }
+  catch (e) {
 
-    console.error(error);
+    console.error(e);
 
-    toast(error.message);
+    toast(e.message);
 
   }
 
 }
-
-
-/* =================================================
-   ADD FUEL
-
-   Previous odometer is automatically calculated.
-================================================= */
 
 async function addFuel() {
 
@@ -3737,70 +3925,39 @@ async function addFuel() {
     val("fuelVehicle");
 
   const amount =
-    num(val("fuelAmount"));
+    num(
+      val("fuelAmount")
+    );
 
-  const odometer =
-    num(val("fuelOdo"));
+  const currentOdo =
+    num(
+      val("fuelOdo")
+    );
+
+  const previousOdo =
+    num(
+      val("fuelLastOdo")
+    );
 
 
   if (
     !vehicleId ||
-    !amount
+    !amount ||
+    !currentOdo
   ) {
     return toast(
-      "Vehicle and fuel amount are required"
+      "Vehicle, current odometer and fuel amount are required"
     );
   }
 
 
   if (
-    odometer <= 0
+    previousOdo &&
+    currentOdo <=
+    previousOdo
   ) {
     return toast(
-      "Enter current odometer reading"
-    );
-  }
-
-
-  /*
-    Find previous odometer before saving.
-  */
-
-  const previousRecords =
-    getVehicleFuelRecords(
-      vehicleId
-    );
-
-
-  const previous =
-    previousRecords.length
-      ? previousRecords[
-          previousRecords.length - 1
-        ]
-      : null;
-
-
-  const previousOdometer =
-    previous
-      ? num(previous.Odometer)
-      : 0;
-
-
-  const distance =
-    previousOdometer > 0
-      ? odometer -
-        previousOdometer
-      : null;
-
-
-  if (
-    distance !== null &&
-    distance < 0
-  ) {
-    return toast(
-      "Current odometer cannot be lower than previous reading (" +
-      previousOdometer.toLocaleString("en-IN") +
-      " km)"
+      "Current odometer must be greater than previous odometer"
     );
   }
 
@@ -3818,7 +3975,7 @@ async function addFuel() {
           today(),
 
         Odometer:
-          odometer,
+          currentOdo,
 
         Quantity:
           num(
@@ -3838,58 +3995,37 @@ async function addFuel() {
 
 
     [
+      "fuelLastOdo",
       "fuelOdo",
+      "fuelDistance",
       "fuelQty",
       "fuelAmount",
       "fuelNotes"
     ].forEach(id => {
 
-      if ($(id)) {
-        $(id).value = "";
-      }
+      $(id).value = "";
 
     });
 
 
     renderAll();
 
+    updateFuelPreviousOdometer();
 
-    /*
-      Show useful confirmation.
-    */
+    toast(
+      "Fuel saved"
+    );
 
-    if (
-      distance !== null
-    ) {
+  }
+  catch (e) {
 
-      toast(
-        "Fuel saved • Distance travelled: " +
-        distance.toLocaleString("en-IN") +
-        " km"
-      );
+    console.error(e);
 
-    } else {
-
-      toast(
-        "Fuel saved • First odometer record"
-      );
-
-    }
-
-  } catch (error) {
-
-    console.error(error);
-
-    toast(error.message);
+    toast(e.message);
 
   }
 
 }
-
-
-/* =================================================
-   ADD MAINTENANCE
-================================================= */
 
 async function addMaintenance() {
 
@@ -3897,8 +4033,9 @@ async function addMaintenance() {
     val("maintVehicle");
 
   const amount =
-    num(val("maintAmount"));
-
+    num(
+      val("maintAmount")
+    );
 
   if (
     !vehicleId ||
@@ -3908,7 +4045,6 @@ async function addMaintenance() {
       "Vehicle and maintenance amount are required"
     );
   }
-
 
   try {
 
@@ -3944,7 +4080,6 @@ async function addMaintenance() {
       }
     );
 
-
     [
       "maintAmount",
       "maintOdo",
@@ -3952,12 +4087,9 @@ async function addMaintenance() {
       "maintRemarks"
     ].forEach(id => {
 
-      if ($(id)) {
-        $(id).value = "";
-      }
+      $(id).value = "";
 
     });
-
 
     renderAll();
 
@@ -3965,28 +4097,21 @@ async function addMaintenance() {
       "Maintenance saved"
     );
 
-  } catch (error) {
+  }
+  catch (e) {
 
-    console.error(error);
+    console.error(e);
 
-    toast(error.message);
+    toast(e.message);
 
   }
 
 }
 
-
 function resetVehicleFilters() {
 
-  if ($("vehicleTypeFilter")) {
-    $("vehicleTypeFilter").value =
-      "";
-  }
-
-  if ($("vehicleFilter")) {
-    $("vehicleFilter").value =
-      "";
-  }
+  $("vehicleTypeFilter").value = "";
+  $("vehicleFilter").value = "";
 
   renderVehicles();
 
@@ -3999,110 +4124,100 @@ function resetVehicleFilters() {
 
 function fillLists() {
 
-  const categories =
+  const cats =
     unique(
       (DB.passbook || [])
         .map(
-          item =>
-            item.Category
+          x =>
+            x.Category
         )
     );
 
-
   opt(
     $("dashCategory"),
-    categories,
-    item => item,
-    item => item,
+    cats,
+    x => x,
+    x => x,
     "All Categories"
   );
-
 
   opt(
     $("pbFilterCategory"),
-    categories,
-    item => item,
-    item => item,
+    cats,
+    x => x,
+    x => x,
     "All Categories"
   );
 
 
-  function dataList(
+  function dl(
     id,
-    array
+    arr
   ) {
 
-    const element =
+    const e =
       $(id);
 
-    if (!element) {
-      return;
-    }
+    if (!e) return;
 
-    element.innerHTML =
-      unique(array)
-        .map(item => `
-          <option
-            value="${esc(item)}"
-          ></option>
-        `)
+    e.innerHTML =
+      unique(arr)
+        .map(
+          x =>
+            `<option value="${esc(x)}"></option>`
+        )
         .join("");
 
   }
 
 
-  dataList(
+  dl(
     "categoryList",
-    categories
+    cats
   );
 
-
-  dataList(
+  dl(
     "accountList",
     (DB.passbook || [])
       .map(
-        item =>
-          item.Account
+        x =>
+          x.Account
       )
   );
 
-
-  dataList(
+  dl(
     "remarksList",
     (DB.passbook || [])
       .map(
-        item =>
-          item.Remarks
+        x =>
+          x.Remarks
       )
   );
 
-
-  dataList(
+  dl(
     "companyList",
     (DB.salary || [])
       .map(
-        item =>
-          item.Company
+        x =>
+          x.Company
       )
   );
 
-
-  dataList(
+  dl(
     "salaryRemarksList",
     (DB.salary || [])
       .map(
-        item =>
-          item.Remarks
+        x =>
+          x.Remarks
       )
   );
 
-
-  dataList(
+  dl(
     "personList",
     (DB.transactions || [])
       .map(
-        item =>
-          item.Person
+        x =>
+          x.Person
       )
   );
 
@@ -4110,10 +4225,10 @@ function fillLists() {
   opt(
     $("emiLoan"),
     DB.loans || [],
-    item =>
-      item["Loan Name"],
-    item =>
-      item.ID,
+    x =>
+      x["Loan Name"],
+    x =>
+      x.ID,
     "Select loan"
   );
 
@@ -4128,15 +4243,13 @@ document.addEventListener(
   "DOMContentLoaded",
   () => {
 
-
-    const savedTheme =
+    const saved =
       localStorage.getItem(
         "afh-theme"
       );
 
-
     if (
-      savedTheme === "dark"
+      saved === "dark"
     ) {
       document.body.classList.add(
         "dark"
@@ -4144,91 +4257,80 @@ document.addEventListener(
     }
 
 
-    if ($("themeBtn")) {
+    $("themeBtn").onclick =
+      () => {
 
-      $("themeBtn").onclick =
-        () => {
+        document.body
+          .classList
+          .toggle("dark");
 
-          document.body.classList.toggle(
-            "dark"
-          );
+        localStorage.setItem(
+          "afh-theme",
 
-
-          localStorage.setItem(
-            "afh-theme",
-
-            document.body.classList.contains(
-              "dark"
-            )
+          document.body
+            .classList
+            .contains("dark")
               ? "dark"
               : "light"
-          );
+        );
 
-
-          $("themeBtn").textContent =
-            document.body.classList.contains(
-              "dark"
-            )
+        $("themeBtn").textContent =
+          document.body
+            .classList
+            .contains("dark")
               ? "☀️ Light"
               : "🌙 Dark";
 
-        };
+      };
 
 
-      $("themeBtn").textContent =
-        document.body.classList.contains(
-          "dark"
-        )
+    $("themeBtn").textContent =
+      document.body
+        .classList
+        .contains("dark")
           ? "☀️ Light"
           : "🌙 Dark";
 
-    }
 
-
-    if ($("menuBtn")) {
-
-      $("menuBtn").onclick =
-        () => {
-
-          $("sidebar")?.classList.toggle(
-            "open"
-          );
-
-        };
-
-    }
+    $("menuBtn").onclick =
+      () =>
+        $("sidebar")
+          .classList
+          .toggle("open");
 
 
     document
       .querySelectorAll(
         "[data-page]"
       )
-      .forEach(button => {
+      .forEach(b => {
 
-        button.onclick =
+        b.onclick =
           () => {
 
             document
               .querySelectorAll(
                 ".page"
               )
-              .forEach(page =>
-                page.classList.remove(
+              .forEach(p =>
+                p.classList.remove(
                   "active"
                 )
               );
 
-
             $(
-              button.dataset.page
-            )?.classList.add(
-              "active"
-            );
+              b.dataset.page
+            )
+              .classList
+              .add(
+                "active"
+              );
 
-
-            $("sidebar")?.classList.remove(
-              "open"
-            );
+            $("sidebar")
+              .classList
+              .remove(
+                "open"
+              );
 
           };
 
@@ -4240,10 +4342,11 @@ document.addEventListener(
       "dashCategory"
     ].forEach(id => {
 
-      $(id)?.addEventListener(
-        "change",
-        renderDashboard
-      );
+      $(id)
+        ?.addEventListener(
+          "change",
+          renderDashboard
+        );
 
     });
 
@@ -4253,10 +4356,11 @@ document.addEventListener(
       "pbFilterCategory"
     ].forEach(id => {
 
-      $(id)?.addEventListener(
-        "change",
-        renderPassbook
-      );
+      $(id)
+        ?.addEventListener(
+          "change",
+          renderPassbook
+        );
 
     });
 
@@ -4266,10 +4370,8 @@ document.addEventListener(
         "change",
         () => {
 
-          if ($("vehicleFilter")) {
-            $("vehicleFilter").value =
-              "";
-          }
+          $("vehicleFilter").value =
+            "";
 
           renderVehicles();
 
@@ -4298,6 +4400,24 @@ document.addEventListener(
       );
 
 
+    /*
+      FUEL AUTO CALCULATION EVENTS
+    */
+
+    $("fuelVehicle")
+      ?.addEventListener(
+        "change",
+        updateFuelPreviousOdometer
+      );
+
+
+    $("fuelOdo")
+      ?.addEventListener(
+        "input",
+        calculateFuelDistance
+      );
+
+
     [
       "pbDate",
       "gtDate",
@@ -4307,8 +4427,10 @@ document.addEventListener(
     ].forEach(id => {
 
       if ($(id)) {
+
         $(id).value =
           today();
+
       }
 
     });
@@ -4320,8 +4442,10 @@ document.addEventListener(
     ].forEach(id => {
 
       if ($(id)) {
+
         $(id).value =
           monthNow();
+
       }
 
     });
