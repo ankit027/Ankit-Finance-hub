@@ -28,3 +28,56 @@
   font-size:12px;
   opacity:.7;
 }
+.fuel-distance-box{
+  margin-top:12px;
+  padding:12px;
+  border-radius:12px;
+  background:var(--card-bg, #f5f7fb);
+  display:grid;
+  grid-template-columns:repeat(3, 1fr);
+  gap:12px;
+}
+
+.fuel-distance-box div{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+
+.fuel-distance-box small{
+  font-size:12px;
+  opacity:.7;
+}
+
+.fuel-distance-box b{
+  font-size:15px;
+}
+
+.fuel-distance-result{
+  padding-left:12px;
+  border-left:2px solid #ccc;
+}
+
+.fuel-distance-result b{
+  font-size:18px;
+}
+
+.warning{
+  display:block;
+  border:1px solid #e0a000;
+}
+
+@media(max-width:600px){
+
+  .fuel-distance-box{
+    grid-template-columns:1fr;
+  }
+
+  .fuel-distance-result{
+    border-left:none;
+    border-top:1px solid #ccc;
+    padding-left:0;
+    padding-top:10px;
+  }
+
+}
