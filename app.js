@@ -70,12 +70,7 @@ function setStatus(text) {
    API
 ================================================= */
 
-function apiReady() {
-
-  return API_URL &&
-    !API_URL.includes("PASTE_YOUR");
-
-}
+let syncInProgress = false;
 
 async function api(action, payload = {}) {
 
@@ -85,29 +80,80 @@ async function api(action, payload = {}) {
     );
   }
 
-  const r = await fetch(API_URL, {
-    method: "POST",
-    mode: "cors",
-    headers: {
-      "Content-Type": "text/plain;charset=utf-8"
-    },
-    body: JSON.stringify({
-      action,
-      ...payload
-    })
-  });
+  const controller = new AbortController();
 
-  const j = await r.json();
+  const timer = setTimeout(() => {
+    controller.abort();
+  }, 20000);
 
-  if (!j.success) {
-    throw new Error(
-      j.error || "Cloud request failed"
-    );
+
+  try {
+
+    const response = await fetch(API_URL, {
+      method: "POST",
+      mode: "cors",
+      redirect: "follow",
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8"
+      },
+      body: JSON.stringify({
+        action,
+        ...payload
+      }),
+      signal: controller.signal
+    });
+
+
+    const text = await response.text();
+
+    let json;
+
+    try {
+
+      json = JSON.parse(text);
+
+    } catch (err) {
+
+      console.error("API response:", text);
+
+      throw new Error(
+        "Invalid API response. Check Apps Script deployment access."
+      );
+
+    }
+
+
+    if (!json.success) {
+
+      throw new Error(
+        json.error || "Cloud request failed"
+      );
+
+    }
+
+
+    return json;
+
+  } catch (err) {
+
+    if (err.name === "AbortError") {
+
+      throw new Error(
+        "Connection timed out. Check your Apps Script deployment."
+      );
+
+    }
+
+    throw err;
+
+  } finally {
+
+    clearTimeout(timer);
+
   }
 
-  return j;
-
 }
+
 
 
 /* =================================================
@@ -115,54 +161,39 @@ async function api(action, payload = {}) {
 ================================================= */
 async function loadAll() {
 
+  if (syncInProgress) return;
+
+
   if (!apiReady()) {
+
     setStatus("⚠️ API URL required");
-    toast("Paste Apps Script Web App URL in app.js");
+
+    toast(
+      "Paste Apps Script Web App URL in app.js"
+    );
+
     renderAll();
+
     return;
+
   }
+
+
+  syncInProgress = true;
+
 
   try {
 
-    setStatus("☁️ Connecting...");
+    setStatus("☁️ Syncing...");
 
-    const url =
-      API_URL +
-      "?action=loadAll&_=" +
-      Date.now();
 
-    const r = await fetch(url, {
-      method: "GET",
-      redirect: "follow",
-      cache: "no-store"
-    });
+    // Use the same POST API method as Save/Delete.
+    // This avoids some Google Apps Script redirect issues.
+    const response = await api("loadAll");
 
-    if (!r.ok) {
-      throw new Error(
-        "Server error: " + r.status
-      );
-    }
 
-    const text = await r.text();
+    DB = response.data || {};
 
-    let j;
-
-    try {
-      j = JSON.parse(text);
-    } catch (err) {
-      console.error("Invalid API response:", text);
-      throw new Error(
-        "API returned an invalid response. Check Apps Script deployment."
-      );
-    }
-
-    if (!j.success) {
-      throw new Error(
-        j.error || "Cloud load failed"
-      );
-    }
-
-    DB = j.data || {};
 
     [
       "transactions",
@@ -181,12 +212,20 @@ async function loadAll() {
       "fuel",
       "maintenance"
     ].forEach(key => {
-      DB[key] = DB[key] || [];
+
+      if (!Array.isArray(DB[key])) {
+        DB[key] = [];
+      }
+
     });
+
+
+    renderAll();
 
     setStatus("☁️ Synced");
 
-    renderAll();
+    toast("✓ Cloud data synced");
+
 
   } catch (e) {
 
@@ -199,10 +238,19 @@ async function loadAll() {
       "Unable to connect to Google Apps Script"
     );
 
+
+    // Still render existing data if available
     renderAll();
+
+
+  } finally {
+
+    syncInProgress = false;
+
   }
-}
-/* =================================================
+
+}/
+* =================================================
    SAVE / DELETE
 ================================================= */
 
