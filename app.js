@@ -3503,108 +3503,87 @@ function renderVehicles() {
       )
       .join("");
 
+// ===============================
+// RECENT FUEL TRANSACTIONS
+// ===============================
 
-  /*
-    FUEL HISTORY
-  */
+const recentFuel = recentRecords(fuels, 5);
 
-  const recentFuel =
-    recentRecords(
-      fuels,
-      10
-    );
+$("fuelList").innerHTML =
+  recentFuel.map(x => `
+    <div class="item">
 
+      <div>
+        <b>${esc(vehicleName(x["Vehicle ID"]))}</b>
 
-  $("fuelList").innerHTML =
-    recentFuel
-      .map(x => {
+        <br>
 
-        const distance =
-          fuelDistance(
-            x,
-            x["Vehicle ID"]
-          );
+        <small>
+          ${displayDate(x.Date)}
+          • ${num(x.Odometer).toLocaleString("en-IN")} km
+          • ${num(x.Quantity)} L
+        </small>
+      </div>
 
-        return `
-          <div class="item">
+      <div>
+        <b>${fmt(x.Amount)}</b>
 
-            <div>
+        <br>
 
-              <b>
-                ${esc(
-                  vehicleName(
-                    x["Vehicle ID"]
-                  )
-                )}
-              </b>
+        <button
+          class="danger"
+          onclick="del('fuel','${x.ID}')"
+        >
+          Delete
+        </button>
+      </div>
 
-              <br>
-
-              <small>
-
-                ${displayDate(
-                  x.Date
-                )}
-
-                •
-                ${num(
-                  x.Odometer
-                )
-                  .toLocaleString(
-                    "en-IN"
-                  )} km
-
-                •
-                ${
-                  distance
-                    ? distance
-                        .toLocaleString(
-                          "en-IN"
-                        ) +
-                      " km travelled"
-                    : "First fuel entry"
-                }
-
-                •
-                ${num(
-                  x.Quantity
-                )} L
-
-              </small>
-
-            </div>
-
-            <div>
-
-              <b>
-                ${fmt(
-                  x.Amount
-                )}
-              </b>
-
-              <br>
-
-              <button
-                class="danger"
-                onclick="del(
-                  'fuel',
-                  '${x.ID}'
-                )"
-              >
-                Delete
-              </button>
-
-            </div>
-
-          </div>
-        `;
-
-      })
-      .join("")
-      ||
-      "<p class='muted'>No recent fuel entries</p>";
+    </div>
+  `).join("")
+  || "<p class='muted'>No recent fuel entries</p>";
 
 
+// ===============================
+// RECENT MAINTENANCE
+// ===============================
+
+const recentMaintenance = recentRecords(maint, 5);
+
+$("maintenanceList").innerHTML =
+  recentMaintenance.map(x => `
+    <div class="item">
+
+      <div>
+        <b>
+          ${esc(vehicleName(x["Vehicle ID"]))}
+          • ${esc(x.Category)}
+        </b>
+
+        <br>
+
+        <small>
+          ${displayDate(x.Date)}
+          • ${num(x.Odometer).toLocaleString("en-IN")} km
+          ${x.Remarks ? " • " + esc(x.Remarks) : ""}
+        </small>
+      </div>
+
+      <div>
+        <b>${fmt(x.Amount)}</b>
+
+        <br>
+
+        <button
+          class="danger"
+          onclick="del('maintenance','${x.ID}')"
+        >
+          Delete
+        </button>
+      </div>
+
+    </div>
+  `).join("")
+  || "<p class='muted'>No recent maintenance entries</p>";
   /*
     MAINTENANCE HISTORY
   */
