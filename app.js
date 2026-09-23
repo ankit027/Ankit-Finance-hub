@@ -41,14 +41,22 @@ function setStatus(text) {
   if (el) el.textContent = text;
 }
 
-/* ================= API (with retry) ================= */
+/* ================= API (handles cold starts) ================= */
 async function api(action, payload = {}, retries = 2) {
   const attempts = retries + 1;
   let lastError = null;
 
   for (let attempt = 1; attempt <= attempts; attempt++) {
+
+    // Longer timeout on first attempt (cold start),
+    // shorter on retries (warm)
+    const timeout = attempt === 1 ? 60000 : 30000;
+
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 45000);
+    const timer = setTimeout(() => controller.abort(), timeout);
+    const startTime = Date.now();
+
+    console.log(`[API] ${action} — attempt ${attempt}/${attempts} (timeout: ${timeout}ms)`);
 
     try {
       const response = await fetch(API_URL, {
@@ -61,35 +69,39 @@ async function api(action, payload = {}, retries = 2) {
       });
 
       const text = await response.text();
-      let json;
+      console.log(`[API] ✓ ${action} in ${Date.now() - startTime}ms`);
 
-      try {
-        json = JSON.parse(text);
-      } catch (err) {
-        console.error("API raw response:", text);
-        throw new Error("Server returned invalid data (not JSON).");
+      let json;
+      try { json = JSON.parse(text); }
+      catch (err) {
+        console.error("API raw:", text.slice(0, 500));
+        throw new Error("Server returned invalid data.");
       }
 
       if (!json.success) throw new Error(json.error || "Cloud request failed");
       return json;
+
     } catch (err) {
+
       lastError = err;
-      console.warn(`API attempt ${attempt}/${attempts} failed:`, err.message);
+      console.warn(`[API] attempt ${attempt} failed after ${Date.now() - startTime}ms:`, err.message);
+
       if (attempt < attempts) {
-        await new Promise((r) => setTimeout(r, 1000 * attempt));
+        // Show user we're retrying
+        setStatus(`☁️ Retrying (${attempt}/${retries})...`);
+        await new Promise((r) => setTimeout(r, 1500));
       }
+
     } finally {
       clearTimeout(timer);
     }
   }
 
   if (lastError?.name === "AbortError") {
-    throw new Error("Connection timed out after multiple attempts.");
+    throw new Error("Apps Script is warming up. Please try again in a moment.");
   }
-
   throw lastError;
 }
-
 /* ================= LOAD ================= */
 async function loadAll(showToast = false) {
   if (syncInProgress) return;
@@ -98,7 +110,7 @@ async function loadAll(showToast = false) {
   try {
     setStatus("☁️ Syncing...");
 
-    const response = await api("loadAll", {}, 3);
+    const response = await api("loadAll", {}, 2);
     DB = response.data || {};
 
     [
@@ -109,37 +121,30 @@ async function loadAll(showToast = false) {
     });
 
     renderAll();
-
     lastSyncTime = Date.now();
     setStatus("☁️ Synced");
 
     if (showToast) toast("✓ Cloud data synced");
-  } catch (e) {
-    console.error("Load error:", e);
 
-    if (showToast) {
-      setStatus("⚠️ Sync failed");
-      toast("Sync failed — check your connection");
+  } catch (e) {
+
+    console.error("Load failed:", e);
+
+    // If we have ANY data already, don't panic — just show a soft message
+    if (Object.keys(DB).length && DB.passbook?.length) {
+      setStatus("☁️ Offline (retrying)");
+      if (showToast) toast("Showing cached data — retrying in background");
     } else {
-      setStatus("⚠️ Retrying...");
+      setStatus("⚠️ Sync failed");
+      if (showToast) toast("Sync failed — tap 🔄 to retry");
     }
 
     if (Object.keys(DB).length) renderAll();
+
   } finally {
     syncInProgress = false;
   }
 }
-
-function updateSyncLabel() {
-  if (!lastSyncTime) return;
-  const secs = Math.floor((Date.now() - lastSyncTime) / 1000);
-
-  if (secs < 5) setStatus("☁️ Synced just now");
-  else if (secs < 60) setStatus(`☁️ Synced ${secs}s ago`);
-  else if (secs < 3600) setStatus(`☁️ Synced ${Math.floor(secs / 60)}m ago`);
-  else setStatus("☁️ Synced");
-}
-
 /* ================= LIVE REFRESH ================= */
 function startLiveRefresh() {
   if (refreshTimer) clearInterval(refreshTimer);
@@ -1021,4 +1026,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   loadAll(false);
   startLiveRefresh();
+});
+
+// Pre-warm Apps Script on page load so first user action is fast
+window.addEventListener("load", () => {
+  fetch(API_URL, {
+    method: "POST",
+    mode: "cors",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({ action: "__ping" })
+  }).catch(() => {}); // ignore errors — just warming up
 });
