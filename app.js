@@ -1,12 +1,10 @@
 /* =================================================================
-   ANKIT FINANCE HUB — FRONTEND WITH LIVE AUTO-REFRESH
+   ANKIT FINANCE HUB — FRONTEND (NO FUEL QUANTITY)
    ================================================================= */
 
 const API_URL =
   "https://script.google.com/macros/s/AKfycbyBzmIaPUtD0UGyjDWOU_1J9W14hL8Lk_VEQPEs_OA5dPPDVR78Wyxd__LclEi11CSJ3w/exec";
 
-/* Auto-refresh interval (in milliseconds).
-   30000 = 30 seconds. Change as you like. */
 const LIVE_REFRESH_MS = 30000;
 
 let DB = {}, charts = {};
@@ -43,39 +41,53 @@ function setStatus(text) {
   if (el) el.textContent = text;
 }
 
-/* ================= API ================= */
-async function api(action, payload = {}) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 20000);
+/* ================= API (with retry) ================= */
+async function api(action, payload = {}, retries = 2) {
+  const attempts = retries + 1;
+  let lastError = null;
 
-  try {
-    const response = await fetch(API_URL, {
-      method: "POST",
-      mode: "cors",
-      redirect: "follow",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action, ...payload }),
-      signal: controller.signal,
-    });
-
-    const text = await response.text();
-    let json;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 45000);
 
     try {
-      json = JSON.parse(text);
-    } catch (err) {
-      console.error("API response:", text);
-      throw new Error("Invalid API response. Check Apps Script deployment access.");
-    }
+      const response = await fetch(API_URL, {
+        method: "POST",
+        mode: "cors",
+        redirect: "follow",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action, ...payload }),
+        signal: controller.signal,
+      });
 
-    if (!json.success) throw new Error(json.error || "Cloud request failed");
-    return json;
-  } catch (err) {
-    if (err.name === "AbortError") throw new Error("Connection timed out.");
-    throw err;
-  } finally {
-    clearTimeout(timer);
+      const text = await response.text();
+      let json;
+
+      try {
+        json = JSON.parse(text);
+      } catch (err) {
+        console.error("API raw response:", text);
+        throw new Error("Server returned invalid data (not JSON).");
+      }
+
+      if (!json.success) throw new Error(json.error || "Cloud request failed");
+      return json;
+    } catch (err) {
+      lastError = err;
+      console.warn(`API attempt ${attempt}/${attempts} failed:`, err.message);
+      if (attempt < attempts) {
+        await new Promise((r) => setTimeout(r, 1000 * attempt));
+      }
+    } finally {
+      clearTimeout(timer);
+    }
   }
+
+  if (lastError?.name === "AbortError") {
+    throw new Error("Connection timed out after multiple attempts.");
+  }
+
+  throw lastError;
 }
 
 /* ================= LOAD ================= */
@@ -86,7 +98,7 @@ async function loadAll(showToast = false) {
   try {
     setStatus("☁️ Syncing...");
 
-    const response = await api("loadAll");
+    const response = await api("loadAll", {}, 3);
     DB = response.data || {};
 
     [
@@ -99,20 +111,27 @@ async function loadAll(showToast = false) {
     renderAll();
 
     lastSyncTime = Date.now();
-    updateSyncLabel();
+    setStatus("☁️ Synced");
 
     if (showToast) toast("✓ Cloud data synced");
   } catch (e) {
     console.error("Load error:", e);
-    setStatus("⚠️ Sync failed");
-    if (showToast) toast(e.message || "Unable to connect");
-    renderAll();
+
+    if (showToast) {
+      setStatus("⚠️ Sync failed");
+      toast("Sync failed — check your connection");
+    } else {
+      setStatus("⚠️ Retrying...");
+    }
+
+    if (Object.keys(DB).length) renderAll();
   } finally {
     syncInProgress = false;
   }
 }
 
 function updateSyncLabel() {
+  if (!lastSyncTime) return;
   const secs = Math.floor((Date.now() - lastSyncTime) / 1000);
 
   if (secs < 5) setStatus("☁️ Synced just now");
@@ -124,7 +143,6 @@ function updateSyncLabel() {
 /* ================= LIVE REFRESH ================= */
 function startLiveRefresh() {
   if (refreshTimer) clearInterval(refreshTimer);
-
   refreshTimer = setInterval(() => {
     updateSyncLabel();
     if (!document.hidden && !syncInProgress) {
@@ -133,7 +151,6 @@ function startLiveRefresh() {
   }, LIVE_REFRESH_MS);
 }
 
-/* Refresh immediately when user comes back to the tab */
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden && !syncInProgress && Date.now() - lastSyncTime > 5000) {
     loadAll(false);
@@ -157,7 +174,6 @@ async function save(table, data) {
 
 async function del(table, id) {
   if (!confirm("Delete this record?")) return;
-
   try {
     await api("delete", { table, id });
     DB[table] = (DB[table] || []).filter((x) => String(x.ID) !== String(id));
@@ -213,10 +229,8 @@ function chart(id, type, data, options = {}) {
   if (charts[id]) charts[id].destroy();
   const el = $(id);
   if (!el) return;
-
   charts[id] = new Chart(el, {
-    type,
-    data,
+    type, data,
     options: { responsive: true, maintainAspectRatio: false, ...options },
   });
 }
@@ -224,7 +238,6 @@ function chart(id, type, data, options = {}) {
 /* ================= DASHBOARD ================= */
 function renderDashboard() {
   const m = val("dashMonth"), c = val("dashCategory");
-
   const pb = (DB.passbook || []).filter(
     (x) => (!m || monthOf(x.Date) === m) && (!c || x.Category === c)
   );
@@ -260,13 +273,11 @@ function renderDashboard() {
 
   const inc = months.map((mm) =>
     (DB.passbook || []).filter((x) => monthOf(x.Date) === mm && x.Type === "Income")
-      .reduce((s, x) => s + num(x.Amount), 0)
-  );
+      .reduce((s, x) => s + num(x.Amount), 0));
 
   const exp = months.map((mm) =>
     (DB.passbook || []).filter((x) => monthOf(x.Date) === mm && x.Type === "Expense")
-      .reduce((s, x) => s + num(x.Amount), 0)
-  );
+      .reduce((s, x) => s + num(x.Amount), 0));
 
   chart("mainChart", "bar", {
     labels: months,
@@ -280,14 +291,11 @@ function renderDashboard() {
 
   chart("expenseChart", "doughnut", {
     labels: cats,
-    datasets: [
-      {
-        data: cats.map((cat) =>
-          pb.filter((x) => x.Type === "Expense" && (x.Category || "Other") === cat)
-            .reduce((s, x) => s + num(x.Amount), 0)
-        ),
-      },
-    ],
+    datasets: [{
+      data: cats.map((cat) =>
+        pb.filter((x) => x.Type === "Expense" && (x.Category || "Other") === cat)
+          .reduce((s, x) => s + num(x.Amount), 0)),
+    }],
   });
 }
 
@@ -325,21 +333,18 @@ function renderPassbook() {
 
   chart("passbookChart", "bar", {
     labels: cats,
-    datasets: [
-      {
-        label: "Amount",
-        data: cats.map((c) =>
-          rows.filter((x) => (x.Category || "Other") === c).reduce((s, x) => s + num(x.Amount), 0)
-        ),
-      },
-    ],
+    datasets: [{
+      label: "Amount",
+      data: cats.map((c) =>
+        rows.filter((x) => (x.Category || "Other") === c)
+          .reduce((s, x) => s + num(x.Amount), 0)),
+    }],
   });
 }
 
 function editPassbook(id) {
   const x = (DB.passbook || []).find((r) => String(r.ID) === String(id));
   if (!x) return;
-
   $("pbEditId").value = x.ID || "";
   $("pbDate").value = displayDate(x.Date);
   $("pbType").value = x.Type || "Expense";
@@ -347,7 +352,6 @@ function editPassbook(id) {
   $("pbAmt").value = x.Amount || "";
   $("pbAccount").value = x.Account || "";
   $("pbRemarks").value = x.Remarks || "";
-
   $("pbSaveBtn").textContent = "Update";
   $("pbForm").classList.add("editing");
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -440,7 +444,6 @@ async function addSalary() {
       Amount: num(val("salAmount")),
       Remarks: val("salRemarks"),
     });
-
     ["salCompany", "salAmount", "salRemarks"].forEach((id) => ($(id).value = ""));
     renderAll();
     toast("Salary saved");
@@ -480,8 +483,7 @@ function renderLoans() {
         label: "Paid",
         data: loans.map((l) =>
           emi.filter((e) => String(e["Loan ID"]) === String(l.ID))
-            .reduce((s, e) => s + num(e.Amount), 0)
-        ),
+            .reduce((s, e) => s + num(e.Amount), 0)),
       },
     ],
   });
@@ -497,7 +499,6 @@ async function addLoan() {
       "Initial Amount": num(val("loanInitial")),
       Remarks: val("loanRemarks"),
     });
-
     ["loanName", "loanInitial", "loanRemarks"].forEach((id) => ($(id).value = ""));
     renderAll();
     toast("Loan added");
@@ -517,7 +518,6 @@ async function addEmi() {
       Amount: num(val("emiAmount")),
       Remarks: val("emiRemarks"),
     });
-
     $("emiAmount").value = "";
     $("emiRemarks").value = "";
     renderAll();
@@ -530,7 +530,6 @@ async function addEmi() {
 /* ================= GIVE & TAKE ================= */
 function renderGive() {
   const rows = DB.transactions || [];
-
   let toReceive = 0, toPay = 0;
 
   rows.forEach((x) => {
@@ -603,7 +602,6 @@ async function addGive() {
       Purpose: val("gtPurpose"),
       Notes: val("gtNotes"),
     });
-
     ["gtPerson", "gtAmount", "gtPurpose", "gtNotes"].forEach((id) => ($(id).value = ""));
     renderAll();
     toast("Saved");
@@ -652,17 +650,13 @@ function vehicleStats(vehicle) {
     if (d > 0) { totalDistance += d; distances.push(d); }
   });
 
-  const validFuel = records.slice(1);
-  const totalFuel = validFuel.reduce((s, x) => s + num(x.Quantity), 0);
   const totalCost = records.reduce((s, x) => s + num(x.Amount), 0);
-
   const avgKMPerFill = distances.length ? totalDistance / distances.length : 0;
-  const mileage = totalFuel > 0 ? totalDistance / totalFuel : 0;
   const last = records.length ? records[records.length - 1] : null;
 
   return {
-    records, currentKM, totalDistance, totalFuel, totalCost,
-    fuelEntries: records.length, intervals: distances.length, avgKMPerFill, mileage,
+    records, currentKM, totalDistance, totalCost,
+    fuelEntries: records.length, intervals: distances.length, avgKMPerFill,
     lastDate: last ? displayDate(last.Date) : "",
   };
 }
@@ -684,12 +678,7 @@ function vehiclePerformanceCard(vehicle) {
       <div class="maint-row"><span>Avg KM / Fuel Fill</span>
         <b>${s.avgKMPerFill ? s.avgKMPerFill.toFixed(1) + " km" : "—"}</b></div>
       <hr>
-      <div class="maint-section-title">⛽ Fuel Performance</div>
-      <div class="maint-row"><span>Fuel Used</span>
-        <b>${s.totalFuel.toFixed(2)} L</b></div>
-      <div class="maint-row"><span>Average Mileage</span>
-        <b class="good-km">${s.mileage ? s.mileage.toFixed(2) + " km/L" : "—"}</b></div>
-      <hr>
+      <div class="maint-section-title">💰 Cost</div>
       <div class="maint-row"><span>Total Fuel Cost</span><b>${fmt(s.totalCost)}</b></div>
       <div class="maint-row"><span>Last Fuel Date</span><b>${s.lastDate || "—"}</b></div>
     </div>`;
@@ -805,7 +794,7 @@ function renderVehicles() {
     <div class="item">
       <div>
         <b>${esc(vehicleName(x["Vehicle ID"]))}</b><br>
-        <small>${displayDate(x.Date)} • ${num(x.Odometer).toLocaleString("en-IN")} km • ${num(x.Quantity)} L</small>
+        <small>${displayDate(x.Date)} • ${num(x.Odometer).toLocaleString("en-IN")} km</small>
       </div>
       <div>
         <b>${fmt(x.Amount)}</b><br>
@@ -837,8 +826,7 @@ function renderVehicles() {
       label: "Fuel Cost",
       data: chartVehicles.map((v) =>
         (DB.fuel || []).filter((x) => String(x["Vehicle ID"]) === String(v.ID))
-          .reduce((s, x) => s + num(x.Amount), 0)
-      ),
+          .reduce((s, x) => s + num(x.Amount), 0)),
     }],
   });
 
@@ -848,8 +836,7 @@ function renderVehicles() {
       label: "Maintenance Cost",
       data: chartVehicles.map((v) =>
         (DB.maintenance || []).filter((x) => String(x["Vehicle ID"]) === String(v.ID))
-          .reduce((s, x) => s + num(x.Amount), 0)
-      ),
+          .reduce((s, x) => s + num(x.Amount), 0)),
     }],
   });
 }
@@ -865,17 +852,13 @@ function updateFuelPreviousOdometer() {
 function calculateFuelDistance() {
   const previous = num(val("fuelLastOdo"));
   const current = num(val("fuelOdo"));
-
   if (!current || !previous) { $("fuelDistance").value = ""; return; }
-
   const distance = current - previous;
-
   if (distance < 0) {
     $("fuelDistance").value = "";
     toast("Current odometer cannot be less than previous odometer");
     return;
   }
-
   $("fuelDistance").value = distance;
 }
 
@@ -889,7 +872,6 @@ async function addVehicle() {
       "Vehicle Type": val("vehicleType") || "Car",
       "Number Plate": val("vehiclePlate"),
     });
-
     ["vehicleName", "vehiclePlate"].forEach((id) => ($(id).value = ""));
     renderAll();
     toast("Vehicle added");
@@ -916,13 +898,12 @@ async function addFuel() {
       "Vehicle ID": vehicleId,
       Date: val("fuelDate") || today(),
       Odometer: currentOdo,
-      Quantity: num(val("fuelQty")),
       Amount: amount,
       "Fuel Type": val("fuelType"),
       Notes: val("fuelNotes"),
     });
 
-    ["fuelLastOdo", "fuelOdo", "fuelDistance", "fuelQty", "fuelAmount", "fuelNotes"]
+    ["fuelLastOdo", "fuelOdo", "fuelDistance", "fuelAmount", "fuelNotes"]
       .forEach((id) => ($(id).value = ""));
 
     renderAll();
