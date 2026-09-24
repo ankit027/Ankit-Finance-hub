@@ -1,5 +1,6 @@
 /* =================================================================
-   ANKIT FINANCE HUB — FRONTEND (NO FUEL QUANTITY)
+   ANKIT FINANCE HUB — FRONTEND
+   With live auto-refresh, retry logic, and success popup
    ================================================================= */
 
 const API_URL =
@@ -41,6 +42,39 @@ function setStatus(text) {
   if (el) el.textContent = text;
 }
 
+/* ================= SUCCESS POPUP ================= */
+function showSuccess(message = "Your entry has been saved to the cloud.", title = "Saved!") {
+  const modal = $("successModal");
+  if (!modal) {
+    toast("✅ " + message);
+    return;
+  }
+
+  $("successTitle").textContent = title;
+  $("successMessage").textContent = message;
+
+  modal.classList.add("show");
+
+  setTimeout(() => $("successOkBtn")?.focus(), 50);
+
+  const closeModal = () => {
+    modal.classList.remove("show");
+  };
+
+  $("successOkBtn").onclick = closeModal;
+
+  modal.onclick = (e) => {
+    if (e.target === modal) closeModal();
+  };
+
+  document.addEventListener("keydown", function escHandler(e) {
+    if (e.key === "Escape") {
+      closeModal();
+      document.removeEventListener("keydown", escHandler);
+    }
+  });
+}
+
 /* ================= API (handles cold starts) ================= */
 async function api(action, payload = {}, retries = 2) {
   const attempts = retries + 1;
@@ -48,10 +82,7 @@ async function api(action, payload = {}, retries = 2) {
 
   for (let attempt = 1; attempt <= attempts; attempt++) {
 
-    // Longer timeout on first attempt (cold start),
-    // shorter on retries (warm)
     const timeout = attempt === 1 ? 60000 : 30000;
-
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeout);
     const startTime = Date.now();
@@ -82,16 +113,13 @@ async function api(action, payload = {}, retries = 2) {
       return json;
 
     } catch (err) {
-
       lastError = err;
       console.warn(`[API] attempt ${attempt} failed after ${Date.now() - startTime}ms:`, err.message);
 
       if (attempt < attempts) {
-        // Show user we're retrying
         setStatus(`☁️ Retrying (${attempt}/${retries})...`);
         await new Promise((r) => setTimeout(r, 1500));
       }
-
     } finally {
       clearTimeout(timer);
     }
@@ -102,6 +130,7 @@ async function api(action, payload = {}, retries = 2) {
   }
   throw lastError;
 }
+
 /* ================= LOAD ================= */
 async function loadAll(showToast = false) {
   if (syncInProgress) return;
@@ -127,10 +156,8 @@ async function loadAll(showToast = false) {
     if (showToast) toast("✓ Cloud data synced");
 
   } catch (e) {
-
     console.error("Load failed:", e);
 
-    // If we have ANY data already, don't panic — just show a soft message
     if (Object.keys(DB).length && DB.passbook?.length) {
       setStatus("☁️ Offline (retrying)");
       if (showToast) toast("Showing cached data — retrying in background");
@@ -140,11 +167,21 @@ async function loadAll(showToast = false) {
     }
 
     if (Object.keys(DB).length) renderAll();
-
   } finally {
     syncInProgress = false;
   }
 }
+
+function updateSyncLabel() {
+  if (!lastSyncTime) return;
+  const secs = Math.floor((Date.now() - lastSyncTime) / 1000);
+
+  if (secs < 5) setStatus("☁️ Synced just now");
+  else if (secs < 60) setStatus(`☁️ Synced ${secs}s ago`);
+  else if (secs < 3600) setStatus(`☁️ Synced ${Math.floor(secs / 60)}m ago`);
+  else setStatus("☁️ Synced");
+}
+
 /* ================= LIVE REFRESH ================= */
 function startLiveRefresh() {
   if (refreshTimer) clearInterval(refreshTimer);
@@ -368,6 +405,11 @@ async function addPassbook() {
 
   const editing = !!val("pbEditId");
 
+  // Capture values BEFORE clearing the form
+  const savedCat = val("pbCat");
+  const savedAmt = num(val("pbAmt"));
+  const savedAcc = val("pbAccount");
+
   try {
     await save("passbook", {
       ID: val("pbEditId"),
@@ -381,7 +423,11 @@ async function addPassbook() {
 
     clearPassbook();
     renderAll();
-    toast(editing ? "Updated" : "Saved to cloud");
+
+    showSuccess(
+      `${savedCat} · ₹${savedAmt.toLocaleString("en-IN")}${savedAcc ? " · " + savedAcc : ""}`,
+      editing ? "Updated!" : "Saved!"
+    );
   } catch (e) {
     toast(e.message);
   }
@@ -442,6 +488,9 @@ async function addSalary() {
   if (!val("salMonth") || !num(val("salAmount")))
     return toast("Month and amount required");
 
+  const savedCompany = val("salCompany") || "Salary";
+  const savedAmt = num(val("salAmount"));
+
   try {
     await save("salary", {
       Month: val("salMonth"),
@@ -449,9 +498,11 @@ async function addSalary() {
       Amount: num(val("salAmount")),
       Remarks: val("salRemarks"),
     });
+
     ["salCompany", "salAmount", "salRemarks"].forEach((id) => ($(id).value = ""));
     renderAll();
-    toast("Salary saved");
+
+    showSuccess(`${savedCompany} · ₹${savedAmt.toLocaleString("en-IN")}`, "Saved!");
   } catch (e) {
     toast(e.message);
   }
@@ -498,6 +549,9 @@ async function addLoan() {
   if (!val("loanName") || !num(val("loanInitial")))
     return toast("Loan name and amount required");
 
+  const savedName = val("loanName");
+  const savedAmt = num(val("loanInitial"));
+
   try {
     await save("loans", {
       "Loan Name": val("loanName"),
@@ -506,7 +560,8 @@ async function addLoan() {
     });
     ["loanName", "loanInitial", "loanRemarks"].forEach((id) => ($(id).value = ""));
     renderAll();
-    toast("Loan added");
+
+    showSuccess(`${savedName} · ₹${savedAmt.toLocaleString("en-IN")}`, "Saved!");
   } catch (e) {
     toast(e.message);
   }
@@ -515,6 +570,9 @@ async function addLoan() {
 async function addEmi() {
   if (!val("emiLoan") || !val("emiMonth") || !num(val("emiAmount")))
     return toast("Select loan, month and amount");
+
+  const savedAmt = num(val("emiAmount"));
+  const savedMonth = val("emiMonth");
 
   try {
     await save("emi", {
@@ -526,7 +584,8 @@ async function addEmi() {
     $("emiAmount").value = "";
     $("emiRemarks").value = "";
     renderAll();
-    toast("EMI saved");
+
+    showSuccess(`EMI ₹${savedAmt.toLocaleString("en-IN")} · ${savedMonth}`, "Saved!");
   } catch (e) {
     toast(e.message);
   }
@@ -598,6 +657,9 @@ async function addGive() {
   if (!val("gtPerson") || !num(val("gtAmount")))
     return toast("Person and amount required");
 
+  const savedPerson = val("gtPerson");
+  const savedAmt = num(val("gtAmount"));
+
   try {
     await save("transactions", {
       Person: val("gtPerson"),
@@ -609,7 +671,8 @@ async function addGive() {
     });
     ["gtPerson", "gtAmount", "gtPurpose", "gtNotes"].forEach((id) => ($(id).value = ""));
     renderAll();
-    toast("Saved");
+
+    showSuccess(`${savedPerson} · ₹${savedAmt.toLocaleString("en-IN")}`, "Saved!");
   } catch (e) {
     toast(e.message);
   }
@@ -871,15 +934,18 @@ async function addVehicle() {
   const name = val("vehicleName");
   if (!name) return toast("Vehicle name required");
 
+  const savedType = val("vehicleType") || "Car";
+
   try {
     await save("vehicles", {
       "Vehicle Name": name,
-      "Vehicle Type": val("vehicleType") || "Car",
+      "Vehicle Type": savedType,
       "Number Plate": val("vehiclePlate"),
     });
     ["vehicleName", "vehiclePlate"].forEach((id) => ($(id).value = ""));
     renderAll();
-    toast("Vehicle added");
+
+    showSuccess(`${savedType} · ${name}`, "Saved!");
   } catch (e) {
     console.error(e);
     toast(e.message);
@@ -898,6 +964,9 @@ async function addFuel() {
   if (previousOdo && currentOdo <= previousOdo)
     return toast("Current odometer must be greater than previous odometer");
 
+  const savedVehicle = vehicleName(vehicleId);
+  const savedOdo = currentOdo;
+
   try {
     await save("fuel", {
       "Vehicle ID": vehicleId,
@@ -913,7 +982,8 @@ async function addFuel() {
 
     renderAll();
     updateFuelPreviousOdometer();
-    toast("Fuel saved");
+
+    showSuccess(`${savedVehicle} · ${savedOdo.toLocaleString("en-IN")} km · ₹${amount.toLocaleString("en-IN")}`, "Saved!");
   } catch (e) {
     console.error(e);
     toast(e.message);
@@ -927,11 +997,14 @@ async function addMaintenance() {
   if (!vehicleId || !amount)
     return toast("Vehicle and maintenance amount are required");
 
+  const savedVehicle = vehicleName(vehicleId);
+  const savedCat = val("maintCategory") || "Service";
+
   try {
     await save("maintenance", {
       "Vehicle ID": vehicleId,
       Date: val("maintDate") || today(),
-      Category: val("maintCategory") || "Service",
+      Category: savedCat,
       Amount: amount,
       Odometer: num(val("maintOdo")),
       "Next Target KM": num(val("maintTargetKm")),
@@ -942,7 +1015,8 @@ async function addMaintenance() {
       .forEach((id) => ($(id).value = ""));
 
     renderAll();
-    toast("Maintenance saved");
+
+    showSuccess(`${savedVehicle} · ${savedCat} · ₹${amount.toLocaleString("en-IN")}`, "Saved!");
   } catch (e) {
     console.error(e);
     toast(e.message);
@@ -1026,14 +1100,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   loadAll(false);
   startLiveRefresh();
-});
 
-// Pre-warm Apps Script on page load so first user action is fast
-window.addEventListener("load", () => {
+  // Pre-warm Apps Script
   fetch(API_URL, {
     method: "POST",
     mode: "cors",
     headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify({ action: "__ping" })
-  }).catch(() => {}); // ignore errors — just warming up
+    body: JSON.stringify({ action: "__ping" }),
+  }).catch(() => {});
 });
