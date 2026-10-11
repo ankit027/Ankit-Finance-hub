@@ -371,7 +371,7 @@ function renderDashboard() {
     : "This month";
 
   renderQuickMonths();
-  renderDashBudgetHero();
+    renderDashBudgets(m);
   renderRecentActivity();
   renderDashStats(m);
   renderDashCharts(m);
@@ -1908,19 +1908,13 @@ document.addEventListener("DOMContentLoaded", () => {
     renderBudgetHero();
   });
 
-  // Defaults
+    // Defaults
   ["pbDate", "gtDate", "fuelDate", "maintDate", "tfDate"].forEach((id) => {
     if ($(id)) $(id).value = today();
   });
-  ["salMonth", "emiMonth", "moMonth", "budgetMonth"].forEach((id) => {
+  ["salMonth", "emiMonth", "moMonth", "budgetMonth", "dashMonth"].forEach((id) => {
     if ($(id)) $(id).value = monthNow();
   });
-  $("dashMonth").value = monthNow();
-
-  loadAll(false);
-  startLiveRefresh();
-  loadMonthlyOpenings();
-
   // Pre-warm Apps Script
   fetch(API_URL, {
     method: "POST",
