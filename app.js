@@ -293,8 +293,6 @@ function renderAll() {
 }
 
 
-/* ═══════════════ CHART ═══════════════ */
-
 function chart(id, type, data, options = {}) {
   if (!window.Chart) return;
   if (charts[id]) charts[id].destroy();
@@ -309,7 +307,9 @@ function chart(id, type, data, options = {}) {
       ...options,
     },
   });
-/* ═══════════════ ACCOUNT HELPERS ═══════════════ */
+}
+
+/* ═══════════════ ACCOUNT HELPERS ═══════════════ *//* ═══════════════ ACCOUNT HELPERS ═══════════════ */
 
 function accountName(id) {
   return (DB.accounts || []).find((a) => String(a.ID) === String(id))?.["Account Name"] || "—";
