@@ -371,7 +371,7 @@ function renderDashboard() {
     : "This month";
 
   renderQuickMonths();
-    renderDashBudgets(m);
+  renderDashBudgets(m);
   renderRecentActivity();
   renderDashStats(m);
   renderDashCharts(m);
@@ -1907,8 +1907,7 @@ document.addEventListener("DOMContentLoaded", () => {
     renderBudgets();
     renderBudgetHero();
   });
-
-    // Defaults
+  // Defaults
   ["pbDate", "gtDate", "fuelDate", "maintDate", "tfDate"].forEach((id) => {
     if ($(id)) $(id).value = today();
   });
