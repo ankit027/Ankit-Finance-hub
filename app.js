@@ -1172,44 +1172,50 @@ async function addSalary() {
 function renderSalary() {
   const rows = (DB.salary || []).sort((a, b) => String(b.Month).localeCompare(String(a.Month)));
 
-  $("salaryDash").innerHTML =
-    card("Total", fmt(rows.reduce((s, x) => s + num(x.Amount), 0))) +
-    card("Latest", fmt(rows[0]?.Amount || 0)) +
-    card("Entries", rows.length);
-
-  const el = $("salaryList");
-  if (!rows.length) {
-    el.innerHTML = emptyState("💰", "No salary records");
-    return;
+  const dash = $("salaryDash");
+  if (dash) {
+    dash.innerHTML =
+      card("Total", fmt(rows.reduce((s, x) => s + num(x.Amount), 0))) +
+      card("Latest", fmt(rows[0]?.Amount || 0)) +
+      card("Entries", rows.length);
   }
 
-  el.innerHTML = rows.map((x) => `
-    <div class="item">
-      <div>
-        <b>${esc(x.Company || "Salary")}</b>
-        <small>${esc(String(x.Month).slice(0, 7))}${x.Remarks ? " · " + esc(x.Remarks) : ""}</small>
-      </div>
-      <div>
-        <span class="item-amount" style="color:var(--success)">+${fmt(x.Amount)}</span>
-        <div class="item-actions">
-          <button class="danger small" onclick="del('salary','${x.ID}',{label:'${esc(x.Company)} salary'})">Delete</button>
+  const list = $("salaryList");
+  if (list) {
+    if (!rows.length) {
+      list.innerHTML = emptyState("💰", "No salary records");
+    } else {
+      list.innerHTML = rows.map((x) => `
+        <div class="item">
+          <div>
+            <b>${esc(x.Company || "Salary")}</b>
+            <small>${esc(String(x.Month).slice(0, 7))}${x.Remarks ? " · " + esc(x.Remarks) : ""}</small>
+          </div>
+          <div>
+            <span class="item-amount" style="color:var(--success)">+${fmt(x.Amount)}</span>
+            <div class="item-actions">
+              <button class="danger small" onclick="del('salary','${x.ID}',{label:'${esc(x.Company)} salary'})">Delete</button>
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
-  `).join("");
+      `).join("");
+    }
+  }
 
-  const rev = rows.slice().reverse();
-  chart("salaryChart", "line", {
-    labels: rev.map((x) => String(x.Month).slice(0, 7)),
-    datasets: [{
-      label: "Salary",
-      data: rev.map((x) => num(x.Amount)),
-      borderColor: "#2563eb",
-      backgroundColor: "rgba(37,99,235,0.1)",
-      tension: 0.3,
-      fill: true,
-    }],
-  });
+  if ($("salaryChart")) {
+    const rev = rows.slice().reverse();
+    chart("salaryChart", "line", {
+      labels: rev.map((x) => String(x.Month).slice(0, 7)),
+      datasets: [{
+        label: "Salary",
+        data: rev.map((x) => num(x.Amount)),
+        borderColor: "#2563eb",
+        backgroundColor: "rgba(37,99,235,0.1)",
+        tension: 0.3,
+        fill: true,
+      }],
+    });
+  }
 }
 
 
