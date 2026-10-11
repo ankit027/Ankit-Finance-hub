@@ -241,6 +241,13 @@
     <button class="primary" onclick="toggleBudgetForm()">+ Set Budget</button>
   </div>
 
+  <!-- BUDGET HERO SUMMARY -->
+  <div class="filterbar">
+    <label>Month <input id="budgetMonth" type="month"></label>
+  </div>
+
+  <div id="budgetHero" class="budget-hero"></div>
+
   <div class="form hidden" id="budgetForm">
     <input id="bgEditId" type="hidden">
     <input id="bgCategory" list="budgetCategoryList" placeholder="Category">
@@ -252,15 +259,10 @@
 
   <datalist id="budgetCategoryList"></datalist>
 
-  <div class="filterbar">
-    <label>Month <input id="budgetMonth" type="month"></label>
-  </div>
-
   <div id="budgetsList" class="budgets-grid"></div>
 
 </section>
-
-<!-- ═══════════════ SALARY ═══════════════ -->
+  <!-- ═══════════════ SALARY ═══════════════ -->
 <section id="salary" class="page">
 
   <div class="page-header">
