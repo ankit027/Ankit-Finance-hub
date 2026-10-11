@@ -261,7 +261,35 @@
   <div id="budgetsList" class="budgets-grid"></div>
 
 </section>
+<!-- ═══════════════ SALARY ═══════════════ -->
+<section id="salary" class="page">
 
+  <div class="page-header">
+    <h2>💰 Salary</h2>
+    <button class="primary" onclick="toggleSalaryForm()">+ Add Salary</button>
+  </div>
+
+  <div class="form hidden" id="salaryForm">
+    <input id="salMonth" type="month">
+    <input id="salCompany" list="companyList" placeholder="Company">
+    <input id="salAmount" type="number" placeholder="Amount" step="0.01">
+    <input id="salRemarks" list="salaryRemarksList" placeholder="Remarks">
+    <button onclick="addSalary()">Save</button>
+    <button class="secondary" onclick="cancelSalaryForm()">Cancel</button>
+  </div>
+
+  <datalist id="companyList"></datalist>
+  <datalist id="salaryRemarksList"></datalist>
+
+  <div class="stats-row" id="salaryDash"></div>
+
+  <div class="box">
+    <canvas id="salaryChart"></canvas>
+  </div>
+
+  <div id="salaryList" class="list"></div>
+
+</section>
 <!-- ═══════════════ LOANS ═══════════════ -->
 <section id="loans" class="page">
 
