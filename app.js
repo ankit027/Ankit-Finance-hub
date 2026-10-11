@@ -967,7 +967,120 @@ function editBudget(id) {
   $("bgNotes").value = b.Notes || "";
   $("budgetForm").classList.add("editing");
 }
+/* ═══════════════ BUDGET HERO SUMMARY ═══════════════ */
 
+function renderBudgetHero() {
+  const el = $("budgetHero");
+  if (!el) return;
+
+  const m = val("budgetMonth") || monthNow();
+
+  // Get all budgets (recurring, so apply to every month unless Month is set)
+  const budgets = (DB.budgets || []).filter((b) => !b.Month || b.Month === m);
+
+  // Empty state
+  if (!budgets.length) {
+    el.className = "budget-hero";
+    el.innerHTML = `
+      <div class="budget-hero-empty">
+        <span class="big-icon">🎯</span>
+        <p><b>No budgets set for this month</b></p>
+        <p class="small-text">Tap "+ Set Budget" above to start tracking your spending limits.</p>
+      </div>
+    `;
+    return;
+  }
+
+  // Total budget
+  const totalBudget = budgets.reduce((s, b) => s + num(b.Amount), 0);
+
+  // Total spent = sum of all expense transactions that match a budgeted category
+  const budgetedCategories = budgets.map((b) => b.Category);
+  const spent = (DB.passbook || [])
+    .filter((x) => monthOf(x.Date) === m && x.Type === "Expense" && budgetedCategories.includes(x.Category))
+    .reduce((s, x) => s + num(x.Amount), 0);
+
+  // Leftover
+  const leftover = totalBudget - spent;
+  const pct = totalBudget > 0 ? Math.min(100, (spent / totalBudget) * 100) : 0;
+  const rawPct = totalBudget > 0 ? (spent / totalBudget) * 100 : 0;
+
+  // Status class
+  let statusClass = "hero-ok";
+  if (rawPct >= 100) statusClass = "hero-over";
+  else if (rawPct >= 70) statusClass = "hero-warn";
+
+  el.className = "budget-hero " + statusClass;
+
+  // Days remaining in month
+  const [y, mm] = m.split("-").map(Number);
+  const lastDay = new Date(y, mm, 0).getDate();
+  const now = new Date();
+  let daysLeft = 0;
+  if (now.getFullYear() === y && now.getMonth() + 1 === mm) {
+    daysLeft = lastDay - now.getDate();
+  }
+
+  // Status message
+  let statusMsg = "";
+  if (rawPct >= 100) {
+    statusMsg = `🔴 Over budget by ${fmt(Math.abs(leftover))}`;
+  } else if (rawPct >= 70) {
+    statusMsg = `🟡 Watch out — using ${rawPct.toFixed(0)}% of budget`;
+  } else {
+    statusMsg = `🟢 On track · ${rawPct.toFixed(0)}% used`;
+  }
+
+  const daysMsg = daysLeft > 0
+    ? `${daysLeft} day${daysLeft === 1 ? "" : "s"} left this month`
+    : "End of month";
+
+  const leftClass = leftover < 0 ? "negative" : "";
+
+  el.innerHTML = `
+    <div class="budget-hero-title">
+      <span>🎯 Monthly Budget Summary — ${esc(formatMonthLabel(m))}</span>
+      <span>${esc(statusMsg)}</span>
+    </div>
+
+    <div class="budget-hero-grid">
+      <div class="budget-hero-cell">
+        <small>Total Budget</small>
+        <b>${fmt(totalBudget)}</b>
+      </div>
+
+      <div class="budget-hero-cell spent">
+        <small>Spent</small>
+        <b>${fmt(spent)}</b>
+      </div>
+
+      <div class="budget-hero-cell left ${leftClass}">
+        <small>${leftover >= 0 ? "Leftover" : "Over Budget"}</small>
+        <b>${fmt(Math.abs(leftover))}</b>
+      </div>
+    </div>
+
+    <div class="budget-hero-progress">
+      <div style="width:${pct}%"></div>
+    </div>
+
+    <div class="budget-hero-footer">
+      <span><strong>${pct.toFixed(0)}%</strong> of monthly budget used</span>
+      <span>${esc(daysMsg)}</span>
+    </div>
+  `;
+}
+
+
+/* Helper — format "2026-10" as "October 2026" */
+function formatMonthLabel(m) {
+  if (!m) return "";
+  const [y, mm] = m.split("-").map(Number);
+  return new Date(y, mm - 1).toLocaleDateString("en-IN", {
+    month: "long",
+    year: "numeric",
+  });
+}
 function renderBudgets() {
   const el = $("budgetsList");
   if (!el) return;
