@@ -279,19 +279,18 @@ function recentRecords(arr, limit = 10) {
 }
 
 
-/* ═══════════════ RENDER ALL ═══════════════ */
-
 function renderAll() {
   renderDashboard();
   renderAccounts();
   renderPassbook();
   renderBudgets();
+  renderBudgetHero();    // ← ADD THIS
   renderSalary();
   renderLoans();
   renderGive();
   renderVehicles();
   fillLists();
-}
+}}
 
 
 /* ═══════════════ CHART ═══════════════ */
@@ -375,7 +374,7 @@ function renderDashboard() {
     : "This month";
 
   renderQuickMonths();
-  renderDashBudgets(m);
+  renderDashBudgetHero();
   renderRecentActivity();
   renderDashStats(m);
   renderDashCharts(m);
@@ -1081,7 +1080,9 @@ function formatMonthLabel(m) {
     year: "numeric",
   });
 }
+
 function renderBudgets() {
+   renderBudgetHero(); 
   const el = $("budgetsList");
   if (!el) return;
 
@@ -1905,7 +1906,10 @@ document.addEventListener("DOMContentLoaded", () => {
   $("vehicleFilter")?.addEventListener("change", renderVehicles);
   $("fuelVehicle")?.addEventListener("change", updateFuelPreviousOdometer);
   $("fuelOdo")?.addEventListener("input", calculateFuelDistance);
-  $("budgetMonth")?.addEventListener("change", renderBudgets);
+  $("budgetMonth")?.addEventListener("change", () => {
+  renderBudgets();
+  renderBudgetHero();
+});
 
   // Defaults
   ["pbDate", "gtDate", "fuelDate", "maintDate", "tfDate"].forEach((id) => {
@@ -1939,3 +1943,43 @@ window.addEventListener("load", () => {
   const mo = $("moMonth");
   if (mo) mo.addEventListener("change", loadMonthlyOpenings);
 });
+/* Mini budget hero for dashboard */
+function renderDashBudgetHero() {
+  const host = $("dashBudgets");
+  if (!host) return;
+
+  const m = val("dashMonth") || monthNow();
+  const budgets = (DB.budgets || []).filter((b) => !b.Month || b.Month === m);
+
+  if (!budgets.length) {
+    host.innerHTML = emptyState("🎯", "No budgets set", "Tap Manage to set monthly limits");
+    return;
+  }
+
+  const totalBudget = budgets.reduce((s, b) => s + num(b.Amount), 0);
+  const budgetedCategories = budgets.map((b) => b.Category);
+  const spent = (DB.passbook || [])
+    .filter((x) => monthOf(x.Date) === m && x.Type === "Expense" && budgetedCategories.includes(x.Category))
+    .reduce((s, x) => s + num(x.Amount), 0);
+
+  const leftover = totalBudget - spent;
+  const pct = totalBudget > 0 ? Math.min(100, (spent / totalBudget) * 100) : 0;
+  const rawPct = totalBudget > 0 ? (spent / totalBudget) * 100 : 0;
+  const color = rawPct >= 100 ? "var(--danger)" : rawPct >= 70 ? "var(--warning)" : "var(--success)";
+
+  host.innerHTML = `
+    <div class="mini-budget-hero">
+      <div class="mini-budget-hero-icon">🎯</div>
+      <div class="mini-budget-hero-main">
+        <small>Monthly Budget · ${esc(formatMonthLabel(m))}</small>
+        <b>${fmt(spent)} <span style="color:var(--muted);font-weight:400;font-size:14px">/ ${fmt(totalBudget)}</span></b>
+        <div class="mini-budget-hero-bar">
+          <div style="width:${pct}%;background:${color}"></div>
+        </div>
+        <small style="margin-top:6px;color:${leftover < 0 ? "var(--danger)" : "var(--success)"}">
+          ${leftover >= 0 ? `${fmt(leftover)} left` : `Over by ${fmt(Math.abs(leftover))}`}
+        </small>
+      </div>
+    </div>
+  `;
+}
