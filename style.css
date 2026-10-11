@@ -1066,3 +1066,213 @@ input[type="color"] {
   #sidebar, header, .filterbar, .form, button { display: none !important; }
   main { margin-left: 0; }
 }
+/* ═══════════════════════════════════════════════════════════
+   BUDGET HERO SUMMARY
+   ═══════════════════════════════════════════════════════════ */
+
+.budget-hero {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 22px;
+  margin-bottom: 18px;
+  box-shadow: var(--shadow);
+  position: relative;
+  overflow: hidden;
+}
+
+.budget-hero::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--primary);
+}
+
+.budget-hero.hero-ok::before { background: var(--success); }
+.budget-hero.hero-warn::before { background: var(--warning); }
+.budget-hero.hero-over::before { background: var(--danger); }
+
+.budget-hero-title {
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.budget-hero-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.budget-hero-cell {
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  background: var(--bg);
+  border: 1px solid var(--line);
+}
+
+.budget-hero-cell small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.budget-hero-cell b {
+  display: block;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: var(--text);
+}
+
+.budget-hero-cell.spent b { color: var(--danger); }
+
+.budget-hero-cell.left b {
+  color: var(--success);
+}
+
+.budget-hero-cell.left.negative b {
+  color: var(--danger);
+}
+
+.budget-hero-progress {
+  height: 12px;
+  background: var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 10px;
+  position: relative;
+}
+
+.budget-hero-progress > div {
+  height: 100%;
+  transition: width 0.6s ease-out;
+  border-radius: 999px;
+  background: var(--success);
+}
+
+.budget-hero.hero-ok .budget-hero-progress > div { background: var(--success); }
+.budget-hero.hero-warn .budget-hero-progress > div { background: var(--warning); }
+.budget-hero.hero-over .budget-hero-progress > div { background: var(--danger); }
+
+.budget-hero-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: var(--muted);
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.budget-hero-footer strong {
+  color: var(--text);
+}
+
+/* Empty state for hero */
+.budget-hero-empty {
+  text-align: center;
+  padding: 20px 10px;
+  color: var(--muted);
+}
+
+.budget-hero-empty .big-icon {
+  font-size: 40px;
+  display: block;
+  margin-bottom: 8px;
+  opacity: 0.6;
+}
+
+.budget-hero-empty p {
+  margin: 4px 0;
+  font-size: 14px;
+}
+
+/* Mobile */
+@media (max-width: 600px) {
+  .budget-hero-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .budget-hero-cell {
+    padding: 12px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .budget-hero-cell small {
+    margin-bottom: 0;
+  }
+
+  .budget-hero-cell b {
+    font-size: 18px;
+  }
+}
+
+/* Mini budget hero in dashboard */
+.mini-budget-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+}
+
+.mini-budget-hero-icon {
+  font-size: 28px;
+}
+
+.mini-budget-hero-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.mini-budget-hero-main small {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.mini-budget-hero-main b {
+  display: block;
+  font-size: 16px;
+  margin-top: 2px;
+}
+
+.mini-budget-hero-bar {
+  height: 6px;
+  background: var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.mini-budget-hero-bar > div {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--success);
+  transition: width 0.5s;
+}
