@@ -232,7 +232,6 @@
   <div id="pbList" class="list"></div>
 
 </section>
-
 <!-- ═══════════════ BUDGETS ═══════════════ -->
 <section id="budgets" class="page">
 
@@ -241,11 +240,11 @@
     <button class="primary" onclick="toggleBudgetForm()">+ Set Budget</button>
   </div>
 
-  <!-- BUDGET HERO SUMMARY -->
   <div class="filterbar">
     <label>Month <input id="budgetMonth" type="month"></label>
   </div>
 
+  <!-- ⬇️ BUDGET HERO — TOTAL PLANNED / USED / LEFTOVER ⬇️ -->
   <div id="budgetHero" class="budget-hero"></div>
 
   <div class="form hidden" id="budgetForm">
@@ -258,7 +257,7 @@
   </div>
 
   <datalist id="budgetCategoryList"></datalist>
-
+<div id="budgetHero" class="budget-hero"></div>
   <div id="budgetsList" class="budgets-grid"></div>
 
 </section>
