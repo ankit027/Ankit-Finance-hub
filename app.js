@@ -290,7 +290,7 @@ function renderAll() {
   renderGive();
   renderVehicles();
   fillLists();
-}}
+}
 
 
 /* ═══════════════ CHART ═══════════════ */
