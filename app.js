@@ -1573,9 +1573,20 @@ function renderVehicles() {
   opt($("vehicleFilter"), vehicles.filter((v) => !type || v["Vehicle Type"] === type),
     (v) => v["Vehicle Name"], (v) => v.ID, "All");
 
-  ["fuelVehicle", "maintVehicle"].forEach((id) =>
+    ["fuelVehicle", "maintVehicle"].forEach((id) =>
     opt($(id), vehicles, (v) => v["Vehicle Name"], (v) => v.ID, "Select vehicle"));
 
+  // Populate account dropdowns from saved accounts
+  const accounts = DB.accounts || [];
+  ["fuelAccount", "maintAccount"].forEach((id) => {
+    const el = $(id);
+    if (!el) return;
+    const current = el.value;
+    el.innerHTML =
+      `<option value="">Select Account</option>` +
+      accounts.map((a) => `<option value="${esc(a["Account Name"])}">${esc(a["Account Name"])}</option>`).join("");
+    if (accounts.some((a) => a["Account Name"] === current)) el.value = current;
+  });
   const fuels = (DB.fuel || []).filter((x) => !vid || String(x["Vehicle ID"]) === String(vid));
   const maint = (DB.maintenance || []).filter((x) => !vid || String(x["Vehicle ID"]) === String(vid));
 
@@ -1691,12 +1702,16 @@ async function addVehicle() {
 
 async function addFuel() {
   const vehicleId = val("fuelVehicle");
+  const account = val("fuelAccount");
   const amount = num(val("fuelAmount"));
   const currentOdo = num(val("fuelOdo"));
   const previousOdo = num(val("fuelLastOdo"));
 
   if (!vehicleId || !amount || !currentOdo)
     return toast("Vehicle, odometer and amount required");
+
+  if (!account)
+    return toast("Please select an account");
 
   if (previousOdo && currentOdo <= previousOdo)
     return toast("Current odometer must be greater than previous");
@@ -1706,6 +1721,7 @@ async function addFuel() {
   try {
     await save("fuel", {
       "Vehicle ID": vehicleId,
+      "Account": account,
       Date: val("fuelDate") || today(),
       Odometer: currentOdo,
       Amount: amount,
@@ -1715,6 +1731,7 @@ async function addFuel() {
 
     ["fuelLastOdo", "fuelOdo", "fuelDistance", "fuelAmount", "fuelNotes"]
       .forEach((id) => ($(id).value = ""));
+    $("fuelAccount").value = "";
 
     renderAll();
     updateFuelPreviousOdometer();
@@ -1726,9 +1743,11 @@ async function addFuel() {
 
 async function addMaintenance() {
   const vehicleId = val("maintVehicle");
+  const account = val("maintAccount");
   const amount = num(val("maintAmount"));
 
   if (!vehicleId || !amount) return toast("Vehicle and amount required");
+  if (!account) return toast("Please select an account");
 
   const vName = vehicleName(vehicleId);
   const cat = val("maintCategory") || "Service";
@@ -1736,6 +1755,7 @@ async function addMaintenance() {
   try {
     await save("maintenance", {
       "Vehicle ID": vehicleId,
+      "Account": account,
       Date: val("maintDate") || today(),
       Category: cat,
       Amount: amount,
@@ -1744,6 +1764,16 @@ async function addMaintenance() {
       Remarks: val("maintRemarks"),
     });
 
+    ["maintAmount", "maintOdo", "maintTargetKm", "maintRemarks"]
+      .forEach((id) => ($(id).value = ""));
+    $("maintAccount").value = "";
+
+    renderAll();
+    showSuccess(`${vName} · ${cat} · ${fmt(amount)}`, "Saved!");
+  } catch (e) {
+    toast(e.message);
+  }
+}
     ["maintAmount", "maintOdo", "maintTargetKm", "maintRemarks"]
       .forEach((id) => ($(id).value = ""));
 
