@@ -408,45 +408,44 @@
       </div>
     </div>
 
-    <div class="box">
-      <h3>⛽ Fuel Entry</h3>
-      <div class="form compact">
-        <select id="fuelVehicle"><option value="">Select Vehicle</option></select>
-        <input id="fuelDate" type="date">
-        <input id="fuelLastOdo" type="number" placeholder="Prev Odo" readonly>
-        <input id="fuelOdo" type="number" placeholder="Current Odo">
-        <input id="fuelDistance" type="number" placeholder="Distance" readonly>
-        <input id="fuelAmount" type="number" placeholder="Amount" step="0.01">
-        <select id="fuelType">
-          <option>Petrol</option><option>Diesel</option>
-          <option>CNG</option><option>Electric</option>
-        </select>
-        <input id="fuelNotes" placeholder="Notes">
-        <button onclick="addFuel()">Save Fuel</button>
-      </div>
-    </div>
-
-    <div class="box">
-      <h3>🔧 Maintenance</h3>
-      <div class="form compact">
-        <select id="maintVehicle"><option value="">Select Vehicle</option></select>
-        <input id="maintDate" type="date">
-        <select id="maintCategory">
-          <option>Service</option><option>Oil Change</option>
-          <option>Engine Oil</option><option>Tyres</option>
-          <option>Battery</option><option>Repair</option>
-          <option>Accessories</option><option>Insurance</option>
-          <option>Other</option>
-        </select>
-        <input id="maintAmount" type="number" placeholder="Amount" step="0.01">
-        <input id="maintOdo" type="number" placeholder="Actual KM">
-        <input id="maintTargetKm" type="number" placeholder="Next Target KM">
-        <input id="maintRemarks" placeholder="Remarks">
-        <button onclick="addMaintenance()">Save</button>
-      </div>
-    </div>
+    <<div class="box">
+  <h3>⛽ Fuel Entry</h3>
+  <div class="form compact">
+    <select id="fuelVehicle"><option value="">Select Vehicle</option></select>
+    <select id="fuelAccount"><option value="">Select Account</option></select>
+    <input id="fuelDate" type="date">
+    <input id="fuelLastOdo" type="number" placeholder="Prev Odo" readonly>
+    <input id="fuelOdo" type="number" placeholder="Current Odo">
+    <input id="fuelDistance" type="number" placeholder="Distance" readonly>
+    <input id="fuelAmount" type="number" placeholder="Amount" step="0.01">
+    <select id="fuelType">
+      <option>Petrol</option><option>Diesel</option>
+      <option>CNG</option><option>Electric</option>
+    </select>
+    <input id="fuelNotes" placeholder="Notes">
+    <button onclick="addFuel()">Save Fuel</button>
   </div>
-
+</div>
+   <div class="box">
+  <h3>🔧 Maintenance</h3>
+  <div class="form compact">
+    <select id="maintVehicle"><option value="">Select Vehicle</option></select>
+    <select id="maintAccount"><option value="">Select Account</option></select>
+    <input id="maintDate" type="date">
+    <select id="maintCategory">
+      <option>Service</option><option>Oil Change</option>
+      <option>Engine Oil</option><option>Tyres</option>
+      <option>Battery</option><option>Repair</option>
+      <option>Accessories</option><option>Insurance</option>
+      <option>Other</option>
+    </select>
+    <input id="maintAmount" type="number" placeholder="Amount" step="0.01">
+    <input id="maintOdo" type="number" placeholder="Actual KM">
+    <input id="maintTargetKm" type="number" placeholder="Next Target KM">
+    <input id="maintRemarks" placeholder="Remarks">
+    <button onclick="addMaintenance()">Save</button>
+  </div>
+</div>
   <div id="vehicleDash" class="stats-row"></div>
 
   <h3>📊 Vehicle Performance</h3>
