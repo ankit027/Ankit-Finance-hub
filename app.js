@@ -1788,8 +1788,13 @@ async function addMaintenance() {
 /* ═══════════════ LISTS / DROPDOWNS ═══════════════ */
 
 function fillLists() {
-  const cats = unique((DB.passbook || []).map((x) => x.Category));
-  opt($("pbFilterCategory"), cats, (x) => x, (x) => x, "All");
+    const usedInData = (DB.passbook || []).map((x) => x.Category).filter(Boolean);
+  const allCats = unique([
+    ...DEFAULT_CATEGORIES,
+    ...getCustomCategories(),
+    ...usedInData,
+  ]).sort();
+  opt($("pbFilterCategory"), allCats, (x) => x, (x) => x, "All");
     // ── PASSBOOK CATEGORY DROPDOWN ──
   populateCategoryDropdown();
 
