@@ -1790,6 +1790,8 @@ async function addMaintenance() {
 function fillLists() {
   const cats = unique((DB.passbook || []).map((x) => x.Category));
   opt($("pbFilterCategory"), cats, (x) => x, (x) => x, "All");
+    // ── PASSBOOK CATEGORY DROPDOWN ──
+  populateCategoryDropdown();
 
   function dl(id, arr) {
     const e = $(id);
@@ -1807,7 +1809,82 @@ function fillLists() {
   opt($("emiLoan"), DB.loans || [], (x) => x["Loan Name"], (x) => x.ID, "Select loan");
 }
 
+/* ═══════════════ PASSBOOK CATEGORY DROPDOWN ═══════════════ */
 
+const DEFAULT_CATEGORIES = [
+  "Food",
+  "Petrol / Fuel",
+  "Shopping",
+  "Bills",
+  "Festival",
+  "Health",
+  "Investment",
+  "Insurance",
+  "Donation",
+  "Mummy jinal",
+  "Misc",
+  "Entertainment",
+  "Rent",
+  "Salary",
+  "Income",
+  "Other",
+];
+
+function getCustomCategories() {
+  try {
+    return JSON.parse(localStorage.getItem("afh-custom-categories") || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveCustomCategory(name) {
+  const existing = getCustomCategories();
+  if (!existing.includes(name) && !DEFAULT_CATEGORIES.includes(name)) {
+    existing.push(name);
+    localStorage.setItem("afh-custom-categories", JSON.stringify(existing));
+  }
+}
+
+function populateCategoryDropdown() {
+  const el = $("pbCat");
+  if (!el) return;
+
+  // Combine default + custom + categories already used in passbook
+  const usedInData = (DB.passbook || []).map((x) => x.Category).filter(Boolean);
+  const allCats = unique([
+    ...DEFAULT_CATEGORIES,
+    ...getCustomCategories(),
+    ...usedInData,
+  ]).sort();
+
+  const current = el.value;
+
+  el.innerHTML =
+    `<option value="">Select Category</option>` +
+    allCats.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("") +
+    `<option value="__new__">+ Add new category…</option>`;
+
+  if (allCats.includes(current)) el.value = current;
+}
+
+/* Prompt for a new category when user picks "+ Add new" */
+function handleCategoryChange() {
+  const el = $("pbCat");
+  if (!el) return;
+
+  if (el.value === "__new__") {
+    const name = prompt("Enter new category name:");
+    if (name && name.trim()) {
+      const clean = name.trim();
+      saveCustomCategory(clean);
+      populateCategoryDropdown();
+      el.value = clean;
+    } else {
+      el.value = "";
+    }
+  }
+}
 /* ═══════════════ SEARCH ═══════════════ */
 
 function openSearch() {
@@ -1942,6 +2019,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("budgetMonth")?.addEventListener("change", () => {
     renderBudgets();
     renderBudgetHero();
+     $("pbCat")?.addEventListener("change", handleCategoryChange);
   });
   // Defaults
   ["pbDate", "gtDate", "fuelDate", "maintDate", "tfDate"].forEach((id) => {
