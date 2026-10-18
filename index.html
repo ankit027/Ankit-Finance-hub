@@ -17,7 +17,6 @@
 
 <body>
 
-<!-- ═══════════════ HEADER ═══════════════ -->
 <header>
   <button id="menuBtn">☰</button>
   <h1>💰 Finance Hub</h1>
@@ -28,27 +27,18 @@
   </div>
 </header>
 
-<!-- ═══════════════ SIDEBAR ═══════════════ -->
 <aside id="sidebar">
   <button data-page="dashboard" class="active">🏠 Dashboard</button>
-  <button data-page="accounts">🏦 Accounts</button>
   <button data-page="passbook">📒 Passbook</button>
-  <button data-page="budgets">🎯 Budgets</button>
   <button data-page="salary">💰 Salary</button>
   <button data-page="loans">🏛️ Loans & EMI</button>
   <button data-page="give">🤝 Give & Take</button>
   <button data-page="vehicles">🚗 Vehicles</button>
 </aside>
 
-<!-- ═══════════════ GLOBAL SEARCH OVERLAY ═══════════════ -->
 <div id="searchOverlay" class="search-overlay">
   <div class="search-box">
-    <input
-      id="globalSearch"
-      type="text"
-      placeholder="Search transactions, people, vehicles..."
-      autocomplete="off"
-    >
+    <input id="globalSearch" type="text" placeholder="Search..." autocomplete="off">
     <button id="closeSearch">✕</button>
   </div>
   <div id="searchResults" class="search-results"></div>
@@ -58,133 +48,53 @@
 
 <!-- ═══════════════ DASHBOARD ═══════════════ -->
 <section id="dashboard" class="page active">
-
   <div class="hero-section">
     <div class="hero-card primary">
-      <small>💼 Net Worth</small>
-      <b id="heroNetWorth">₹0</b>
-      <div class="hero-sub" id="heroNetSub">Across all accounts</div>
-    </div>
-
-    <div class="hero-card">
       <small>📈 This Month Income</small>
       <b id="heroIncome">₹0</b>
-      <div class="hero-sub" id="heroIncomeSub">—</div>
     </div>
-
     <div class="hero-card">
       <small>💸 This Month Expense</small>
       <b id="heroExpense">₹0</b>
-      <div class="hero-sub" id="heroExpenseSub">—</div>
     </div>
-
     <div class="hero-card">
       <small>💳 Net Savings</small>
       <b id="heroSavings">₹0</b>
-      <div class="hero-sub" id="heroSavingsSub">This month</div>
     </div>
   </div>
 
   <div class="quick-months" id="quickMonths"></div>
 
+  <!-- SINGLE MONTHLY BUDGET WIDGET -->
+  <div class="box" style="margin-bottom:20px;">
+    <div class="box-header" style="justify-content: space-between; align-items:center;">
+      <h3 style="margin:0;">🎯 Monthly Budget</h3>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <input id="monthlyBudgetInput" type="number" placeholder="e.g. 5000" style="width:120px; padding:6px;" onchange="saveMonthlyBudget()">
+        <button class="primary small" onclick="saveMonthlyBudget()">Save</button>
+      </div>
+    </div>
+    <div id="budgetProgressBox"></div>
+  </div>
+
   <div class="chartgrid">
-    <div class="box">
-      <div class="box-header">
-        <h3>📊 Income vs Expense</h3>
-      </div>
-      <canvas id="mainChart"></canvas>
+    <div class="box"><h3>📊 Income vs Expense</h3><canvas id="mainChart"></canvas></div>
+    <div class="box"><h3>🥧 Category Breakdown</h3><canvas id="expenseChart"></canvas></div>
+  </div>
+
+  <div class="box">
+    <div class="box-header">
+      <h3>🕐 Recent Activity</h3>
+      <button class="secondary small" onclick="gotoPage('passbook')">View all</button>
     </div>
-
-    <div class="box">
-      <div class="box-header">
-        <h3>🥧 Category Breakdown</h3>
-      </div>
-      <canvas id="expenseChart"></canvas>
-    </div>
+    <div id="recentActivity"></div>
   </div>
 
-  <div class="two-col">
-    <div class="box">
-      <div class="box-header">
-        <h3>🎯 Budget Progress</h3>
-        <button class="secondary small" onclick="gotoPage('budgets')">Manage</button>
-      </div>
-      <div id="dashBudgets"></div>
-    </div>
-
-    <div class="box">
-      <div class="box-header">
-        <h3>🕐 Recent Activity</h3>
-        <button class="secondary small" onclick="gotoPage('passbook')">View all</button>
-      </div>
-      <div id="recentActivity"></div>
-    </div>
-  </div>
-
-  <div class="dash-stats" id="dashStats"></div>
-
-  <button class="refresh-btn" onclick="loadAll(true)">
-    🔄 Refresh Cloud Data
-  </button>
-
-</section>
-
-<!-- ═══════════════ ACCOUNTS ═══════════════ -->
-<section id="accounts" class="page">
-
-  <div class="page-header">
-    <h2>🏦 Bank Accounts & Cash</h2>
-    <button class="primary" onclick="toggleAccountForm()">+ Add Account</button>
-  </div>
-
-  <div class="form hidden" id="accountForm">
-    <input id="accEditId" type="hidden">
-    <input id="accName" placeholder="Account Name (HDFC, Cash, Paytm)" required>
-    <select id="accType">
-      <option value="Bank">🏦 Bank</option>
-      <option value="Cash">💵 Cash</option>
-      <option value="Wallet">📱 UPI / Wallet</option>
-      <option value="Credit">💳 Credit Card</option>
-    </select>
-    <input id="accOpening" type="number" placeholder="Opening Balance" step="0.01">
-    <input id="accColor" type="color" value="#2563eb" title="Color">
-    <input id="accNotes" placeholder="Notes (optional)">
-    <button onclick="saveAccount()">Save</button>
-    <button class="secondary" onclick="cancelAccountForm()">Cancel</button>
-  </div>
-
-  <div class="net-worth-box">
-    <small>Total Net Worth</small>
-    <b id="accountsNetWorth">₹0</b>
-  </div>
-
-  <div id="accountsList" class="accounts-grid"></div>
-
-  <h3>💸 Transfer Between Accounts</h3>
-  <div class="form" id="transferForm">
-    <select id="tfFrom"></select>
-    <select id="tfTo"></select>
-    <input id="tfAmount" type="number" placeholder="Amount" step="0.01">
-    <input id="tfDate" type="date">
-    <input id="tfNotes" placeholder="Notes (optional)">
-    <button onclick="addTransfer()">Transfer</button>
-  </div>
-
-  <h3>📅 Monthly Opening Balances</h3>
-  <p class="muted small-text">
-    Auto-rolls from previous month. Override any month below.
-  </p>
-  <div class="filterbar">
-    <label>Month <input id="moMonth" type="month"></label>
-    <button class="secondary" onclick="loadMonthlyOpenings()">Load</button>
-  </div>
-  <div id="monthlyOpenings"></div>
-
+  <button class="refresh-btn" onclick="loadAll(true)">🔄 Refresh Cloud Data</button>
 </section>
 
 <!-- ═══════════════ PASSBOOK ═══════════════ -->
 <section id="passbook" class="page">
-
   <div class="page-header">
     <h2>📒 Passbook</h2>
     <button class="primary" onclick="togglePassbookForm()">+ New Entry</button>
@@ -193,12 +103,7 @@
   <div class="filterbar">
     <label>From <input id="pbFromDate" type="date"></label>
     <label>To <input id="pbToDate" type="date"></label>
-    <label>Category
-      <select id="pbFilterCategory"><option value="">All</option></select>
-    </label>
-    <label>Account
-      <select id="pbFilterAccount"><option value="">All</option></select>
-    </label>
+    <label>Category <select id="pbFilterCategory"><option value="">All</option></select></label>
     <label>Type
       <select id="pbFilterType">
         <option value="">All</option>
@@ -216,55 +121,25 @@
       <option>Expense</option>
       <option>Income</option>
     </select>
-    <select id="pbCat">
+    
+    <!-- Native Dropdown Category -->
+    <select id="pbCat" onchange="handleCategoryChange()">
       <option value="">Select Category</option>
     </select>
+
     <input id="pbAmt" type="number" placeholder="Amount" step="0.01">
-    <select id="pbAccount"></select>
     <input id="pbRemarks" list="remarksList" placeholder="Remarks">
     <button id="pbSaveBtn" onclick="addPassbook()">Save</button>
     <button class="secondary" onclick="cancelPassbookForm()">Cancel</button>
   </div>
 
-   <datalist id="remarksList"></datalist>
-
+  <datalist id="remarksList"></datalist>
   <div class="stats-row" id="passbookDash"></div>
-
   <div id="pbList" class="list"></div>
-
 </section>
-<!-- ═══════════════ BUDGETS ═══════════════ -->
-<section id="budgets" class="page">
 
-  <div class="page-header">
-    <h2>🎯 Monthly Budgets</h2>
-    <button class="primary" onclick="toggleBudgetForm()">+ Set Budget</button>
-  </div>
-
-  <div class="filterbar">
-    <label>Month <input id="budgetMonth" type="month"></label>
-  </div>
-
-  <!-- BUDGET HERO — TOTAL PLANNED / USED / LEFTOVER -->
-  <div id="budgetHero" class="budget-hero"></div>
-
-  <div class="form hidden" id="budgetForm">
-    <input id="bgEditId" type="hidden">
-    <input id="bgCategory" list="budgetCategoryList" placeholder="Category">
-    <input id="bgAmount" type="number" placeholder="Monthly Limit" step="0.01">
-    <input id="bgNotes" placeholder="Notes">
-    <button onclick="saveBudget()">Save</button>
-    <button class="secondary" onclick="cancelBudgetForm()">Cancel</button>
-  </div>
-
-  <datalist id="budgetCategoryList"></datalist>
-
-  <div id="budgetsList" class="budgets-grid"></div>
-
-</section>
 <!-- ═══════════════ SALARY ═══════════════ -->
 <section id="salary" class="page">
-
   <div class="page-header">
     <h2>💰 Salary</h2>
     <button class="primary" onclick="toggleSalaryForm()">+ Add Salary</button>
@@ -281,23 +156,15 @@
 
   <datalist id="companyList"></datalist>
   <datalist id="salaryRemarksList"></datalist>
-
   <div class="stats-row" id="salaryDash"></div>
-
-  <div class="box">
-    <canvas id="salaryChart"></canvas>
-  </div>
-
+  <div class="box"><canvas id="salaryChart"></canvas></div>
   <div id="salaryList" class="list"></div>
-
 </section>
+
 <!-- ═══════════════ LOANS ═══════════════ -->
 <section id="loans" class="page">
-
   <h2>🏛️ Loans & EMI</h2>
-
   <div class="two-col">
-
     <div class="box">
       <h3>Add Loan</h3>
       <div class="form">
@@ -307,7 +174,6 @@
         <button onclick="addLoan()">Add Loan</button>
       </div>
     </div>
-
     <div class="box">
       <h3>Mark EMI Paid</h3>
       <div class="form">
@@ -318,24 +184,15 @@
         <button onclick="addEmi()">Mark Paid</button>
       </div>
     </div>
-
   </div>
-
   <div class="stats-row" id="loanDash"></div>
-
-  <div class="box">
-    <canvas id="loanChart"></canvas>
-  </div>
-
+  <div class="box"><canvas id="loanChart"></canvas></div>
   <div id="loanList" class="list"></div>
-
 </section>
 
 <!-- ═══════════════ GIVE & TAKE ═══════════════ -->
 <section id="give" class="page">
-
   <h2>🤝 Give & Take</h2>
-
   <div class="filterbar">
     <label>Type
       <select id="gtFilterType">
@@ -346,9 +203,7 @@
         <option value="Paid">Paid</option>
       </select>
     </label>
-    <label>Person
-      <select id="gtFilterPerson"><option value="">All</option></select>
-    </label>
+    <label>Person <select id="gtFilterPerson"><option value="">All</option></select></label>
     <button class="secondary" onclick="resetGiveFilters()">Clear</button>
   </div>
 
@@ -368,22 +223,14 @@
   </div>
 
   <datalist id="personList"></datalist>
-
   <div class="stats-row" id="giveDash"></div>
-
-  <div class="box">
-    <canvas id="giveChart"></canvas>
-  </div>
-
+  <div class="box"><canvas id="giveChart"></canvas></div>
   <div id="gtList" class="list"></div>
-
 </section>
 
 <!-- ═══════════════ VEHICLES ═══════════════ -->
 <section id="vehicles" class="page">
-
   <h2>🚗 Vehicles & Fuel</h2>
-
   <div class="filterbar">
     <label>Type
       <select id="vehicleTypeFilter">
@@ -392,9 +239,7 @@
         <option>Car</option>
       </select>
     </label>
-    <label>Vehicle
-      <select id="vehicleFilter"><option value="">All</option></select>
-    </label>
+    <label>Vehicle <select id="vehicleFilter"><option value="">All</option></select></label>
     <button class="secondary" onclick="resetVehicleFilters()">Clear</button>
   </div>
 
@@ -409,49 +254,48 @@
       </div>
     </div>
 
-    <<div class="box">
-  <h3>⛽ Fuel Entry</h3>
-  <div class="form compact">
-    <select id="fuelVehicle"><option value="">Select Vehicle</option></select>
-    <select id="fuelAccount"><option value="">Select Account</option></select>
-    <input id="fuelDate" type="date">
-    <input id="fuelLastOdo" type="number" placeholder="Prev Odo" readonly>
-    <input id="fuelOdo" type="number" placeholder="Current Odo">
-    <input id="fuelDistance" type="number" placeholder="Distance" readonly>
-    <input id="fuelAmount" type="number" placeholder="Amount" step="0.01">
-    <select id="fuelType">
-      <option>Petrol</option><option>Diesel</option>
-      <option>CNG</option><option>Electric</option>
-    </select>
-    <input id="fuelNotes" placeholder="Notes">
-    <button onclick="addFuel()">Save Fuel</button>
-  </div>
-</div>
-   <div class="box">
-  <h3>🔧 Maintenance</h3>
-  <div class="form compact">
-    <select id="maintVehicle"><option value="">Select Vehicle</option></select>
-    <select id="maintAccount"><option value="">Select Account</option></select>
-    <input id="maintDate" type="date">
-    <select id="maintCategory">
-      <option>Service</option><option>Oil Change</option>
-      <option>Engine Oil</option><option>Tyres</option>
-      <option>Battery</option><option>Repair</option>
-      <option>Accessories</option><option>Insurance</option>
-      <option>Other</option>
-    </select>
-    <input id="maintAmount" type="number" placeholder="Amount" step="0.01">
-    <input id="maintOdo" type="number" placeholder="Actual KM">
-    <input id="maintTargetKm" type="number" placeholder="Next Target KM">
-    <input id="maintRemarks" placeholder="Remarks">
-    <button onclick="addMaintenance()">Save</button>
-  </div>
-</div>
-  <div id="vehicleDash" class="stats-row"></div>
+    <div class="box">
+      <h3>⛽ Fuel Entry</h3>
+      <div class="form compact">
+        <select id="fuelVehicle"><option value="">Select Vehicle</option></select>
+        <input id="fuelDate" type="date">
+        <input id="fuelLastOdo" type="number" placeholder="Prev Odo" readonly>
+        <input id="fuelOdo" type="number" placeholder="Current Odo">
+        <input id="fuelDistance" type="number" placeholder="Distance" readonly>
+        <input id="fuelAmount" type="number" placeholder="Amount" step="0.01">
+        <select id="fuelType">
+          <option>Petrol</option><option>Diesel</option>
+          <option>CNG</option><option>Electric</option>
+        </select>
+        <input id="fuelNotes" placeholder="Notes">
+        <button onclick="addFuel()">Save Fuel</button>
+      </div>
+    </div>
 
+    <div class="box">
+      <h3>🔧 Maintenance</h3>
+      <div class="form compact">
+        <select id="maintVehicle"><option value="">Select Vehicle</option></select>
+        <input id="maintDate" type="date">
+        <select id="maintCategory">
+          <option>Service</option><option>Oil Change</option>
+          <option>Engine Oil</option><option>Tyres</option>
+          <option>Battery</option><option>Repair</option>
+          <option>Accessories</option><option>Insurance</option>
+          <option>Other</option>
+        </select>
+        <input id="maintAmount" type="number" placeholder="Amount" step="0.01">
+        <input id="maintOdo" type="number" placeholder="Actual KM">
+        <input id="maintTargetKm" type="number" placeholder="Next Target KM">
+        <input id="maintRemarks" placeholder="Remarks">
+        <button onclick="addMaintenance()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="vehicleDash" class="stats-row"></div>
   <h3>📊 Vehicle Performance</h3>
   <div id="vehiclePerformanceDashboard" class="maintenance-summary"></div>
-
   <h3>🔧 Maintenance Summary</h3>
   <div id="vehicleMaintenanceSummary" class="maintenance-summary"></div>
 
@@ -462,15 +306,12 @@
 
   <h3>⛽ Fuel History</h3>
   <div id="fuelList" class="list"></div>
-
   <h3>🔧 Maintenance History</h3>
   <div id="maintenanceList" class="list"></div>
-
 </section>
 
 </main>
 
-<!-- ═══════════════ SUCCESS MODAL ═══════════════ -->
 <div id="successModal" class="modal-overlay">
   <div class="modal-box">
     <div class="modal-icon">✅</div>
@@ -480,7 +321,6 @@
   </div>
 </div>
 
-<!-- ═══════════════ CONFIRM MODAL ═══════════════ -->
 <div id="confirmModal" class="modal-overlay">
   <div class="modal-box">
     <div class="modal-icon">⚠️</div>
@@ -494,9 +334,7 @@
 </div>
 
 <div id="toast"></div>
-
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="app.js"></script>
-
 </body>
 </html>
