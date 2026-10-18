@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Finance Hub">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <title>Ankit Finance Hub</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <button id="menuBtn" aria-label="Toggle menu">☰</button>
+  <h1>💰 Finance Hub</h1>
+  <div class="right"><button id="searchBtn" title="Search (/)" aria-label="Search">🔍</button><button id="themeBtn" aria-label="Toggle theme">🌙</button><span id="status">☁️</span></div>
+</header>
+<aside id="sidebar">
+  <button data-page="dashboard" class="active">🏠 Dashboard</button>
+  <button data-page="passbook">📒 Passbook</button>
+  <button data-page="salary">💰 Salary</button>
+  <button data-page="loans">🏛️ Loans &amp; EMI</button>
+  <button data-page="give">🤝 Give &amp; Take</button>
+  <button data-page="vehicles">🚗 Vehicles</button>
+</aside>
+<div id="searchOverlay" class="search-overlay">
+  <div class="search-box"><input id="globalSearch" type="text" placeholder="Search..." autocomplete="off"><button id="closeSearch" aria-label="Close search">✕</button></div>
+  <div id="searchResults" class="search-results"></div>
+</div>
+<main>
+<section id="dashboard" class="page active">
+  <div class="page-header"><h2>🏠 Dashboard</h2><label>Month <input id="dashMonth" type="month"></label></div>
+  <div class="hero-section">
+    <div class="hero-card primary"><small>📈 This Month Income</small><b id="heroIncome">₹0</b></div>
+    <div class="hero-card"><small>💸 This Month Expense</small><b id="heroExpense">₹0</b></div>
+    <div class="hero-card"><small>💳 Net Savings</small><b id="heroSavings">₹0</b></div>
+  </div>
+  <div class="quick-months" id="quickMonths"></div>
+  <div class="box" style="margin-bottom:20px"><div class="box-header" style="justify-content:space-between;align-items:center"><h3 style="margin:0">🎯 Monthly Budget</h3><div style="display:flex;gap:8px;align-items:center"><input id="monthlyBudgetInput" type="number" min="0" step="0.01" placeholder="e.g. 5000" style="width:120px;padding:6px" onchange="saveMonthlyBudget()"><button class="primary small" onclick="saveMonthlyBudget()">Save</button></div></div><div id="budgetProgressBox"></div></div>
+  <div class="chartgrid"><div class="box"><h3>📊 Income vs Expense</h3><canvas id="mainChart"></canvas></div><div class="box"><h3>🥧 Category Breakdown</h3><canvas id="expenseChart"></canvas></div></div>
+  <div class="box"><div class="box-header"><h3>🕐 Recent Activity</h3><button class="secondary small" onclick="gotoPage('passbook')">View all</button></div><div id="recentActivity"></div></div>
+  <button class="refresh-btn" onclick="loadAll(true)">🔄 Refresh Cloud Data</button>
+</section>
+<section id="passbook" class="page">
+  <div class="page-header"><h2>📒 Passbook</h2><button class="primary" onclick="togglePassbookForm()">+ New Entry</button></div>
+  <div class="filterbar"><label>From <input id="pbFromDate" type="date"></label><label>To <input id="pbToDate" type="date"></label><label>Category <select id="pbFilterCategory"><option value="">All</option></select></label><label>Type <select id="pbFilterType"><option value="">All</option><option>Income</option><option>Expense</option></select></label><button class="secondary" onclick="resetPassbookFilters()">Clear</button></div>
+  <div class="stats-row" id="passbookDash"></div>
+  <div class="form hidden" id="pbForm">
+    <input id="pbEditId" type="hidden"><input id="pbDate" type="date">
+    <select id="pbType"><option>Expense</option><option>Income</option></select>
+    <select id="pbCat" onchange="handleCategoryChange()"><option value="">Select Category</option></select>
+    <input id="pbAmt" type="number" placeholder="Amount" step="0.01" min="0.01">
+    <select id="pbAccount" onchange="handleAccountChange()"><option value="">Select Account</option></select>
+    <input id="pbRemarks" list="remarksList" placeholder="Remarks">
+    <button id="pbSaveBtn" class="primary" onclick="addPassbook()">Save</button><button class="secondary" onclick="cancelPassbookForm()">Cancel</button>
+  </div>
+  <datalist id="remarksList"></datalist>
+  <div id="pbList" class="list"></div>
+</section>
+<section id="salary" class="page">
+  <div class="page-header"><h2>💰 Salary</h2><button class="primary" onclick="toggleSalaryForm()">+ Add Salary</button></div>
+  <div class="form hidden" id="salaryForm"><input id="salMonth" type="month"><input id="salCompany" list="companyList" placeholder="Company"><input id="salAmount" type="number" placeholder="Amount" step="0.01"><input id="salRemarks" list="salaryRemarksList" placeholder="Remarks"><button class="primary" onclick="addSalary()">Save</button><button class="secondary" onclick="cancelSalaryForm()">Cancel</button></div>
+  <datalist id="companyList"></datalist><datalist id="salaryRemarksList"></datalist><div class="stats-row" id="salaryDash"></div><div class="box"><canvas id="salaryChart"></canvas></div><div id="salaryList" class="list"></div>
+</section>
+<section id="loans" class="page">
+  <h2>🏛️ Loans &amp; EMI</h2><div class="two-col"><div class="box"><h3>Add Loan</h3><div class="form"><input id="loanName" placeholder="Loan name"><input id="loanInitial" type="number" placeholder="Initial amount" step="0.01"><input id="loanRemarks" placeholder="Remarks"><button class="primary" onclick="addLoan()">Add Loan</button></div></div><div class="box"><h3>Mark EMI Paid</h3><div class="form"><select id="emiLoan"><option value="">Select loan</option></select><input id="emiMonth" type="month"><input id="emiAmount" type="number" placeholder="EMI amount" step="0.01"><input id="emiRemarks" placeholder="Remarks"><button class="primary" onclick="addEmi()">Mark Paid</button></div></div></div>
+  <div class="stats-row" id="loanDash"></div><div class="box"><canvas id="loanChart"></canvas></div><div id="loanList" class="list"></div>
+</section>
+<section id="give" class="page">
+  <h2>🤝 Give &amp; Take</h2><div class="filterbar"><label>Type <select id="gtFilterType"><option value="">All</option><option value="Pending to Take">Pending to Take</option><option value="Received">Received</option><option value="Pending to Pay">Pending to Pay</option><option value="Paid">Paid</option></select></label><label>Person <select id="gtFilterPerson"><option value="">All</option></select></label><button class="secondary" onclick="resetGiveFilters()">Clear</button></div>
+  <div class="form"><input id="gtPerson" list="personList" placeholder="Person"><select id="gtType"><option value="Pending to Take">Pending to Take</option><option value="Received">Received</option><option value="Pending to Pay">Pending to Pay</option><option value="Paid">Paid</option></select><input id="gtAmount" type="number" placeholder="Amount" step="0.01"><input id="gtDate" type="date"><input id="gtPurpose" placeholder="Purpose"><input id="gtNotes" placeholder="Notes"><button class="primary" onclick="addGive()">Save</button></div>
+  <datalist id="personList"></datalist><div class="stats-row" id="giveDash"></div><div class="box"><canvas id="giveChart"></canvas></div><div id="gtList" class="list"></div>
+</section>
+<section id="vehicles" class="page">
+  <h2>🚗 Vehicles &amp; Fuel</h2><div class="filterbar"><label>Type <select id="vehicleTypeFilter"><option value="">All Vehicles</option><option>Bike</option><option>Car</option></select></label><label>Vehicle <select id="vehicleFilter"><option value="">All</option></select></label><button class="secondary" onclick="resetVehicleFilters()">Clear</button></div>
+  <div class="three-col"><div class="box"><h3>Add Vehicle</h3><div class="form compact"><input id="vehicleName" placeholder="Dzire / Raider"><select id="vehicleType"><option>Car</option><option>Bike</option></select><input id="vehiclePlate" placeholder="Number Plate"><button class="primary" onclick="addVehicle()">Add</button></div></div>
+  <div class="box"><h3>⛽ Fuel Entry</h3><div class="form compact"><select id="fuelVehicle"><option value="">Select Vehicle</option></select><input id="fuelDate" type="date"><input id="fuelLastOdo" type="number" placeholder="Prev Odo" readonly><input id="fuelOdo" type="number" placeholder="Current Odo"><input id="fuelDistance" type="number" placeholder="Distance" readonly><input id="fuelAmount" type="number" placeholder="Amount" step="0.01"><select id="fuelType"><option>Petrol</option><option>Diesel</option><option>CNG</option><option>Electric</option></select><input id="fuelNotes" placeholder="Notes"><button class="primary" onclick="addFuel()">Save Fuel</button></div></div>
+  <div class="box"><h3>🔧 Maintenance</h3><div class="form compact"><select id="maintVehicle"><option value="">Select Vehicle</option></select><input id="maintDate" type="date"><select id="maintCategory"><option>Service</option><option>Oil Change</option><option>Engine Oil</option><option>Tyres</option><option>Battery</option><option>Repair</option><option>Accessories</option><option>Insurance</option><option>Other</option></select><input id="maintAmount" type="number" placeholder="Amount" step="0.01"><input id="maintOdo" type="number" placeholder="Actual KM"><input id="maintTargetKm" type="number" placeholder="Next Target KM"><input id="maintRemarks" placeholder="Remarks"><button class="primary" onclick="addMaintenance()">Save</button></div></div></div>
+  <div id="vehicleDash" class="stats-row"></div><h3>📊 Vehicle Performance</h3><div id="vehiclePerformanceDashboard" class="maintenance-summary"></div><h3>🔧 Maintenance Summary</h3><div id="vehicleMaintenanceSummary" class="maintenance-summary"></div>
+  <div class="chartgrid"><div class="box"><h3>Fuel Cost</h3><canvas id="fuelChart"></canvas></div><div class="box"><h3>Maintenance Cost</h3><canvas id="maintenanceChart"></canvas></div></div><h3>⛽ Fuel History</h3><div id="fuelList" class="list"></div><h3>🔧 Maintenance History</h3><div id="maintenanceList" class="list"></div>
+</section>
+</main>
+<div id="successModal" class="modal-overlay"><div class="modal-box"><div class="modal-icon">✅</div><h3 id="successTitle">Saved!</h3><p id="successMessage">Your entry has been saved to the cloud.</p><button id="successOkBtn" class="modal-btn">OK</button></div></div>
+<div id="confirmModal" class="modal-overlay"><div class="modal-box"><div class="modal-icon">⚠️</div><h3 id="confirmTitle">Are you sure?</h3><p id="confirmMessage">This action cannot be undone.</p><div class="modal-actions"><button id="confirmCancelBtn" class="secondary">Cancel</button><button id="confirmOkBtn" class="danger">Delete</button></div></div></div>
+<div id="toast"></div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script><script src="app.js"></script>
+</body>
+</html>
