@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════
-   ANKIT FINANCE HUB — FRONTEND (SIMPLIFIED & 1 MONTHLY BUDGET)
+   ANKIT FINANCE HUB — FRONTEND (FULLY SIMPLIFIED & TESTED)
    ═══════════════════════════════════════════════════════════════════ */
 
 const API_URL = "https://script.google.com/macros/s/AKfycbyBzmIaPUtD0UGyjDWOU_1J9W14hL8Lk_VEQPEs_OA5dPPDVR78Wyxd__LclEi11CSJ3w/exec";
@@ -25,110 +25,113 @@ const monthOf = (v) => String(v || "").slice(0, 7);
 const unique = (a) => [...new Set(a.filter(Boolean))];
 
 
-/* ═══════════════ CATEGORIES ═══════════════ */
+/* ═══════════════ DROPDOWNS (CATEGORIES & ACCOUNTS) ═══════════════ */
 
-const DEFAULT_CATEGORIES = [
-  "Food", "Petrol / Fuel", "Shopping", "Bills", "Festival", "Health",
-  "Investment", "Insurance", "Donation", "Mummy jinal", "Misc",
-  "Entertainment", "Rent", "Salary", "Income", "Other",
-];
-
-function getCustomCategories() {
-  try { return JSON.parse(localStorage.getItem("afh-custom-categories") || "[]"); } catch { return []; }
-}
-
-function saveCustomCategory(name) {
-  const existing = getCustomCategories();
-  if (!existing.includes(name) && !DEFAULT_CATEGORIES.includes(name)) {
-    existing.push(name);
-    localStorage.setItem("afh-custom-categories", JSON.stringify(existing));
-  }
-}
+const DEFAULT_CATEGORIES = ["Food", "Petrol / Fuel", "Shopping", "Bills", "Festival", "Health", "Investment", "Insurance", "Donation", "Misc", "Entertainment", "Rent", "Salary", "Income", "Other"];
+const DEFAULT_ACCOUNTS = ["Cash", "HDFC Bank", "Kotak", "Jio Payments Bank", "Amazon Pay", "Paytm", "Credit Card", "Vehicle Tracker"];
 
 function populateCategoryDropdown() {
   const el = $("pbCat");
   if (!el) return;
-
-  const usedInData = (DB.passbook || []).map((x) => x.Category).filter(Boolean);
-  const allCats = unique([...DEFAULT_CATEGORIES, ...getCustomCategories(), ...usedInData]).sort();
-  const current = el.value;
-
-  el.innerHTML =
-    `<option value="">Select Category</option>` +
-    allCats.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("") +
+  const used = (DB.passbook || []).map((x) => x.Category).filter(Boolean);
+  const custom = JSON.parse(localStorage.getItem("afh-custom-cats") || "[]");
+  const all = unique([...DEFAULT_CATEGORIES, ...custom, ...used]).sort();
+  
+  el.innerHTML = `<option value="">Select Category</option>` + 
+    all.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("") + 
     `<option value="__new__">+ Add new category…</option>`;
-
-  if (allCats.includes(current)) el.value = current;
 }
 
 window.handleCategoryChange = function() {
   const el = $("pbCat");
-  if (!el) return;
-
   if (el.value === "__new__") {
-    const name = prompt("Enter new category name:");
+    const name = prompt("Enter new category:");
     if (name && name.trim()) {
       const clean = name.trim();
-      saveCustomCategory(clean);
+      const custom = JSON.parse(localStorage.getItem("afh-custom-cats") || "[]");
+      if (!custom.includes(clean)) {
+        custom.push(clean);
+        localStorage.setItem("afh-custom-cats", JSON.stringify(custom));
+      }
       populateCategoryDropdown();
       el.value = clean;
-    } else {
-      el.value = "";
-    }
+    } else { el.value = ""; }
   }
 };
-/* ═══════════════ ACCOUNTS / PAYMENT MODES ═══════════════ */
-
-const DEFAULT_ACCOUNTS = [
-  "Cash", "HDFC Bank", "Kotak", "Jio Payments Bank", 
-  "Amazon Pay", "Paytm", "Credit Card", "Vehicle Tracker"
-];
-
-function getCustomAccounts() {
-  try { return JSON.parse(localStorage.getItem("afh-custom-accounts") || "[]"); } catch { return []; }
-}
-
-function saveCustomAccount(name) {
-  const existing = getCustomAccounts();
-  if (!existing.includes(name) && !DEFAULT_ACCOUNTS.includes(name)) {
-    existing.push(name);
-    localStorage.setItem("afh-custom-accounts", JSON.stringify(existing));
-  }
-}
 
 function populateAccountDropdown() {
   const el = $("pbAccount");
   if (!el) return;
-
-  // Combine default + custom + accounts already used in past entries
-  const usedInData = (DB.passbook || []).map((x) => x.Account).filter(Boolean);
-  const allAccounts = unique([...DEFAULT_ACCOUNTS, ...getCustomAccounts(), ...usedInData]).sort();
-  const current = el.value;
-
-  el.innerHTML =
-    `<option value="">Select Account</option>` +
-    allAccounts.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("") +
+  const used = (DB.passbook || []).map((x) => x.Account).filter(Boolean);
+  const custom = JSON.parse(localStorage.getItem("afh-custom-accs") || "[]");
+  const all = unique([...DEFAULT_ACCOUNTS, ...custom, ...used]).sort();
+  
+  el.innerHTML = `<option value="">Select Account</option>` + 
+    all.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("") + 
     `<option value="__new__">+ Add new account…</option>`;
-
-  if (allAccounts.includes(current)) el.value = current;
 }
 
 window.handleAccountChange = function() {
   const el = $("pbAccount");
-  if (!el) return;
-
   if (el.value === "__new__") {
-    const name = prompt("Enter new account name (e.g., SBI, Paytm):");
+    const name = prompt("Enter new account:");
     if (name && name.trim()) {
       const clean = name.trim();
-      saveCustomAccount(clean);
+      const custom = JSON.parse(localStorage.getItem("afh-custom-accs") || "[]");
+      if (!custom.includes(clean)) {
+        custom.push(clean);
+        localStorage.setItem("afh-custom-accs", JSON.stringify(custom));
+      }
       populateAccountDropdown();
       el.value = clean;
-    } else {
-      el.value = "";
-    }
+    } else { el.value = ""; }
   }
 };
+
+
+/* ═══════════════ NAVIGATION & UI ═══════════════ */
+
+window.gotoPage = function(page) {
+  document.querySelectorAll(".page").forEach((p) => p.classList.remove("active"));
+  document.querySelectorAll("[data-page]").forEach((b) => b.classList.remove("active"));
+  
+  const target = $(page);
+  if (target) target.classList.add("active");
+  
+  const btn = document.querySelector(`[data-page="${page}"]`);
+  if (btn) btn.classList.add("active");
+  
+  $("sidebar").classList.remove("open"); 
+  window.scrollTo({ top: 0, behavior: "smooth" });
+};
+
+function toast(msg, ms = 2500) {
+  const t = $("toast"); if (!t) return;
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(window._toast);
+  window._toast = setTimeout(() => t.classList.remove("show"), ms);
+}
+
+function showSuccess(message, title = "Saved!") {
+  const modal = $("successModal"); if (!modal) { toast("✅ " + message); return; }
+  $("successTitle").textContent = title;
+  $("successMessage").textContent = message;
+  modal.classList.add("show");
+  const close = () => modal.classList.remove("show");
+  $("successOkBtn").onclick = close;
+  modal.onclick = (e) => { if (e.target === modal) close(); };
+}
+
+function showConfirm(message, onConfirm, title = "Are you sure?") {
+  const modal = $("confirmModal"); if (!modal) { if (confirm(message)) onConfirm(); return; }
+  $("confirmTitle").textContent = title;
+  $("confirmMessage").textContent = message;
+  modal.classList.add("show");
+  const close = () => modal.classList.remove("show");
+  $("confirmCancelBtn").onclick = close;
+  $("confirmOkBtn").onclick = () => { close(); onConfirm(); };
+  modal.onclick = (e) => { if (e.target === modal) close(); };
+}
 
 
 /* ═══════════════ API & DATA ═══════════════ */
@@ -159,7 +162,7 @@ async function api(action, payload = {}, retries = 2) {
     } catch (err) {
       lastError = err;
       if (attempt < attempts) {
-        $("status").textContent = `☁️ Retry ${attempt}/${retries}`;
+        const s = $("status"); if (s) s.textContent = `☁️ Retry ${attempt}/${retries}`;
         await new Promise((r) => setTimeout(r, 1500));
       }
     } finally {
@@ -176,7 +179,7 @@ async function loadAll(showToast = false) {
   syncInProgress = true;
 
   try {
-    $("status").textContent = "☁️ Syncing...";
+    if ($("status")) $("status").textContent = "☁️ Syncing...";
     const response = await api("loadAll", {}, 2);
     DB = response.data || {};
 
@@ -186,11 +189,11 @@ async function loadAll(showToast = false) {
 
     renderAll();
     lastSyncTime = Date.now();
-    $("status").textContent = "☁️ Synced";
+    if ($("status")) $("status").textContent = "☁️ Synced";
     if (showToast) toast("✓ Cloud data synced");
   } catch (e) {
     console.error("Load failed:", e);
-    $("status").textContent = "⚠️ Offline";
+    if ($("status")) $("status").textContent = "⚠️ Offline";
     if (showToast) toast("Sync failed");
     if (Object.keys(DB).length) renderAll();
   } finally {
@@ -229,35 +232,7 @@ async function del(table, id, opts = {}) {
 }
 
 
-/* ═══════════════ UI HELPERS ═══════════════ */
-
-function toast(msg, ms = 2500) {
-  const t = $("toast"); if (!t) return;
-  t.textContent = msg; t.classList.add("show");
-  clearTimeout(window._toast);
-  window._toast = setTimeout(() => t.classList.remove("show"), ms);
-}
-
-function showSuccess(message, title = "Saved!") {
-  const modal = $("successModal"); if (!modal) { toast("✅ " + message); return; }
-  $("successTitle").textContent = title;
-  $("successMessage").textContent = message;
-  modal.classList.add("show");
-  const close = () => modal.classList.remove("show");
-  $("successOkBtn").onclick = close;
-  modal.onclick = (e) => { if (e.target === modal) close(); };
-}
-
-function showConfirm(message, onConfirm, title = "Are you sure?") {
-  const modal = $("confirmModal"); if (!modal) { if (confirm(message)) onConfirm(); return; }
-  $("confirmTitle").textContent = title;
-  $("confirmMessage").textContent = message;
-  modal.classList.add("show");
-  const close = () => modal.classList.remove("show");
-  $("confirmCancelBtn").onclick = close;
-  $("confirmOkBtn").onclick = () => { close(); onConfirm(); };
-  modal.onclick = (e) => { if (e.target === modal) close(); };
-}
+/* ═══════════════ HELPERS ═══════════════ */
 
 function card(label, value) { return `<div class="stat-card"><small>${esc(label)}</small><b>${value}</b></div>`; }
 function emptyState(icon, title) { return `<div class="empty-state"><div class="empty-icon">${icon}</div><p><b>${esc(title)}</b></p></div>`; }
@@ -293,7 +268,7 @@ function chart(id, type, data, options = {}) {
 }
 
 
-/* ═══════════════ DASHBOARD (SINGLE BUDGET) ═══════════════ */
+/* ═══════════════ DASHBOARD ═══════════════ */
 
 function renderDashboard() {
   const m = val("dashMonth") || monthNow();
@@ -311,7 +286,21 @@ function renderDashboard() {
   renderDashCharts(m);
 }
 
-// Fetch the single monthly budget for the selected month
+function renderQuickMonths() {
+  const el = $("quickMonths"); if (!el) return;
+  const months = [];
+  const now = new Date();
+  for (let i = 0; i < 6; i++) months.push(new Date(now.getFullYear(), now.getMonth() - i, 1).toISOString().slice(0, 7));
+
+  el.innerHTML = months.map((mm) => {
+    const [y, m] = mm.split("-");
+    const label = new Date(y, m - 1).toLocaleDateString("en-IN", { month: "short", year: "2-digit" });
+    return `<button class="${(val("dashMonth") || monthNow()) === mm ? "active" : ""}" onclick="setDashMonth('${mm}')">${label}</button>`;
+  }).join("");
+}
+
+function setDashMonth(mm) { $("dashMonth").value = mm; currentQuickMonth = mm; renderDashboard(); }
+
 function getBudgetForMonth(m) {
   const b = (DB.budgets || []).find((x) => x.Month === m);
   return b ? num(b.Amount) : 0;
@@ -322,31 +311,18 @@ function saveMonthlyBudget() {
   const inputVal = num($("monthlyBudgetInput").value);
   if (inputVal <= 0) return toast("Enter a valid budget amount");
 
-  // Reuse the budgets table but store just ONE entry per month
   const existing = (DB.budgets || []).find((x) => x.Month === m);
-  
-  save("budgets", {
-    ID: existing ? existing.ID : "",
-    Month: m,
-    Amount: inputVal,
-    Category: "Total" // Just a dummy value
-  }).then(() => {
-    renderDashboard();
-    showSuccess(`Budget set to ${fmt(inputVal)} for this month.`, "Saved!");
-  }).catch(e => toast(e.message));
+  save("budgets", { ID: existing ? existing.ID : "", Month: m, Amount: inputVal, Category: "Total" })
+    .then(() => { renderDashboard(); showSuccess(`Budget set to ${fmt(inputVal)}`, "Saved!"); })
+    .catch(e => toast(e.message));
 }
 
 function renderMonthlyBudgetWidget(m, currentExpense) {
   const budget = getBudgetForMonth(m);
-  $("monthlyBudgetInput").value = budget > 0 ? budget : "";
+  if ($("monthlyBudgetInput")) $("monthlyBudgetInput").value = budget > 0 ? budget : "";
   
-  const box = $("budgetProgressBox");
-  if (!box) return;
-
-  if (budget <= 0) {
-    box.innerHTML = emptyState("🎯", "No budget set. Enter an amount above.");
-    return;
-  }
+  const box = $("budgetProgressBox"); if (!box) return;
+  if (budget <= 0) { box.innerHTML = emptyState("🎯", "No budget set. Enter an amount above."); return; }
 
   const pct = Math.min(100, (currentExpense / budget) * 100);
   const rawPct = (currentExpense / budget) * 100;
@@ -362,26 +338,10 @@ function renderMonthlyBudgetWidget(m, currentExpense) {
       <div style="width:${pct}%; background:${color}; height:100%; transition:width 0.3s;"></div>
     </div>
     <div style="margin-top:8px; font-size:13px; color:${color}; font-weight:600;">
-      ${leftover >= 0 ? `${fmt(leftover)} Left` : `Over budget by ${fmt(Math.abs(leftover))}`}
-      (${rawPct.toFixed(0)}% used)
+      ${leftover >= 0 ? `${fmt(leftover)} Left` : `Over budget by ${fmt(Math.abs(leftover))}`} (${rawPct.toFixed(0)}% used)
     </div>
   `;
 }
-
-function renderQuickMonths() {
-  const el = $("quickMonths"); if (!el) return;
-  const months = [];
-  const now = new Date();
-  for (let i = 0; i < 6; i++) months.push(new Date(now.getFullYear(), now.getMonth() - i, 1).toISOString().slice(0, 7));
-
-  el.innerHTML = months.map((mm) => {
-    const [y, m] = mm.split("-");
-    const label = new Date(y, m - 1).toLocaleDateString("en-IN", { month: "short", year: "2-digit" });
-    return `<button class="${(val("dashMonth") || monthNow()) === mm ? "active" : ""}" onclick="setDashMonth('${mm}')">${label}</button>`;
-  }).join("");
-}
-
-function setDashMonth(mm) { $("dashMonth").value = mm; currentQuickMonth = mm; renderDashboard(); }
 
 function renderDashCharts(m) {
   const months = [];
@@ -422,6 +382,14 @@ function togglePassbookForm() {
   } else { cancelPassbookForm(); }
 }
 
+function cancelPassbookForm() {
+  $("pbForm").classList.add("hidden");
+  ["pbEditId", "pbCat", "pbAmt", "pbAccount", "pbRemarks"].forEach((id) => { if ($(id)) $(id).value = ""; });
+  $("pbDate").value = today();
+  $("pbType").value = "Expense";
+  $("pbForm").classList.remove("editing");
+}
+
 function editPassbook(id) {
   const x = (DB.passbook || []).find((r) => String(r.ID) === String(id));
   if (!x) return;
@@ -438,49 +406,23 @@ function editPassbook(id) {
   $("pbForm").classList.add("editing");
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
-function cancelPassbookForm() {
-  $("pbForm").classList.add("hidden");
-  ["pbEditId", "pbCat", "pbAmt", "pbRemarks"].forEach((id) => { if ($(id)) $(id).value = ""; });
-  $("pbDate").value = today();
-  $("pbType").value = "Expense";
-  $("pbForm").classList.remove("editing");
-}
-
-function editPassbook(id) {
-  const x = (DB.passbook || []).find((r) => String(r.ID) === String(id));
-  if (!x) return;
-  populateCategoryDropdown();
-  $("pbForm").classList.remove("hidden");
-  $("pbEditId").value = x.ID || "";
-  $("pbDate").value = displayDate(x.Date);
-  $("pbType").value = x.Type || "Expense";
-  $("pbCat").value = x.Category || "";
-  $("pbAmt").value = x.Amount || "";
-  $("pbRemarks").value = x.Remarks || "";
-  $("pbForm").classList.add("editing");
-  window.scrollTo({ top: 0, behavior: "smooth" });
-}
 
 async function addPassbook() {
   if (!val("pbDate") || !val("pbCat") || !num(val("pbAmt"))) return toast("Date, category and amount required");
   if (!val("pbAccount")) return toast("Please select an account");
-
   const editing = !!val("pbEditId");
 
   try {
     await save("passbook", { 
-      ID: val("pbEditId"), 
-      Date: val("pbDate"), 
-      Type: val("pbType"), 
-      Category: val("pbCat"), 
-      Amount: num(val("pbAmt")), 
-      Account: val("pbAccount"), 
+      ID: val("pbEditId"), Date: val("pbDate"), Type: val("pbType"), 
+      Category: val("pbCat"), Amount: num(val("pbAmt")), Account: val("pbAccount"), 
       Remarks: val("pbRemarks") 
     });
     cancelPassbookForm(); renderAll();
     showSuccess(`Saved!`, editing ? "Updated!" : "Saved!");
   } catch (e) { toast(e.message); }
 }
+
 function resetPassbookFilters() {
   ["pbFromDate", "pbToDate", "pbFilterCategory", "pbFilterType"].forEach((id) => { if ($(id)) $(id).value = ""; });
   renderPassbook();
@@ -506,25 +448,17 @@ function renderPassbook() {
 
   el.innerHTML = rows.map((x) => `
     <div class="item">
-      <div><b>${esc(x.Category || "Uncategorized")} • ${esc(x.Type)}</b><small>${esc(x.Date)}${x.Remarks ? " · " + esc(x.Remarks) : ""}</small></div>
+      <div><b>${esc(x.Category || "Uncategorized")} • ${esc(x.Type)}</b><small>${esc(x.Date)} · ${esc(x.Account || "—")}${x.Remarks ? " · " + esc(x.Remarks) : ""}</small></div>
       <div><span class="item-amount" style="color:${x.Type === "Expense" ? "var(--danger)" : "var(--success)"}">${x.Type === "Expense" ? "−" : "+"}${fmt(x.Amount)}</span><div class="item-actions"><button class="success small" onclick="editPassbook('${x.ID}')">Edit</button><button class="danger small" onclick="del('passbook','${x.ID}')">Delete</button></div></div>
     </div>
   `).join("");
 }
 
 
-/* ═══════════════ SALARY ═══════════════ */
+/* ═══════════════ SALARY, LOANS, GIVE, VEHICLES ═══════════════ */
 
-function toggleSalaryForm() {
-  const form = $("salaryForm");
-  if (form.classList.contains("hidden")) { form.classList.remove("hidden"); $("salMonth").value = monthNow(); $("salCompany").focus(); }
-  else { cancelSalaryForm(); }
-}
-
-function cancelSalaryForm() {
-  $("salaryForm").classList.add("hidden");
-  ["salCompany", "salAmount", "salRemarks"].forEach((id) => $(id).value = "");
-}
+function toggleSalaryForm() { const f = $("salaryForm"); if (f.classList.contains("hidden")) { f.classList.remove("hidden"); $("salMonth").value = monthNow(); $("salCompany").focus(); } else { cancelSalaryForm(); } }
+function cancelSalaryForm() { $("salaryForm").classList.add("hidden"); ["salCompany", "salAmount", "salRemarks"].forEach((id) => $(id).value = ""); }
 
 async function addSalary() {
   if (!val("salMonth") || !num(val("salAmount"))) return toast("Month and amount required");
@@ -544,9 +478,6 @@ function renderSalary() {
   }
   if ($("salaryChart")) chart("salaryChart", "line", { labels: rows.slice().reverse().map((x) => String(x.Month).slice(0, 7)), datasets: [{ label: "Salary", data: rows.slice().reverse().map((x) => num(x.Amount)), borderColor: "#2563eb" }] });
 }
-
-
-/* ═══════════════ LOANS ═══════════════ */
 
 async function addLoan() {
   if (!val("loanName") || !num(val("loanInitial"))) return toast("Loan name and amount required");
@@ -577,9 +508,6 @@ function renderLoans() {
   }).join("");
 }
 
-
-/* ═══════════════ GIVE & TAKE ═══════════════ */
-
 async function addGive() {
   if (!val("gtPerson") || !num(val("gtAmount"))) return toast("Person and amount required");
   try {
@@ -589,10 +517,7 @@ async function addGive() {
   } catch (e) { toast(e.message); }
 }
 
-function resetGiveFilters() {
-  ["gtFilterType", "gtFilterPerson"].forEach((id) => { if ($(id)) $(id).value = ""; });
-  renderGive();
-}
+function resetGiveFilters() { ["gtFilterType", "gtFilterPerson"].forEach((id) => { if ($(id)) $(id).value = ""; }); renderGive(); }
 
 function renderGive() {
   const rows = (DB.transactions || []).filter((x) => {
@@ -600,7 +525,6 @@ function renderGive() {
     if (val("gtFilterPerson") && x.Person !== val("gtFilterPerson")) return false;
     return true;
   });
-
   let toReceive = 0, toPay = 0;
   rows.forEach((x) => {
     const amt = num(x.Amount);
@@ -609,17 +533,12 @@ function renderGive() {
     if (x.Type === "Pending to Pay") toPay += amt;
     if (x.Type === "Paid") toPay -= amt;
   });
-
   if ($("giveDash")) $("giveDash").innerHTML = card("📥 To Receive", fmt(Math.max(0, toReceive))) + card("📤 To Pay", fmt(Math.max(0, toPay)));
   const el = $("gtList"); if (!el) return;
   if (!rows.length) { el.innerHTML = emptyState("🤝", "No records"); return; }
-
   el.innerHTML = rows.map((x) => `<div class="item"><div><b>${esc(x.Person)} • ${esc(x.Type)}</b></div><div><span class="item-amount">${fmt(x.Amount)}</span><button class="danger small" onclick="del('transactions','${x.ID}')">Delete</button></div></div>`).join("");
   opt($("gtFilterPerson"), unique((DB.transactions || []).map((x) => x.Person)), (x) => x, (x) => x, "All");
 }
-
-
-/* ═══════════════ VEHICLES ═══════════════ */
 
 function vehicleName(id) { return (DB.vehicles || []).find((v) => String(v.ID) === String(id))?.["Vehicle Name"] || "Vehicle"; }
 function fuelRecords(vehicleId) { return (DB.fuel || []).filter((x) => String(x["Vehicle ID"]) === String(vehicleId)).sort((a, b) => String(a.Date).localeCompare(String(b.Date))); }
@@ -678,24 +597,33 @@ async function addMaintenance() {
 }
 
 
-/* ═══════════════ LISTS / SEARCH / NAV ═══════════════ */
+/* ═══════════════ LISTS & SEARCH ═══════════════ */
 
 function fillLists() {
   const cats = unique((DB.passbook || []).map((x) => x.Category));
   opt($("pbFilterCategory"), cats, (x) => x, (x) => x, "All");
   
-  // Populate the Category & Account dropdowns
-  populateCategoryDropdown();
-  populateAccountDropdown();
-
   function dl(id, arr) { const e = $(id); if (e) e.innerHTML = unique(arr).map((x) => `<option value="${esc(x)}"></option>`).join(""); }
   dl("remarksList", (DB.passbook || []).map((x) => x.Remarks));
   dl("companyList", (DB.salary || []).map((x) => x.Company));
   dl("salaryRemarksList", (DB.salary || []).map((x) => x.Remarks));
   dl("personList", (DB.transactions || []).map((x) => x.Person));
-  
   opt($("emiLoan"), DB.loans || [], (x) => x["Loan Name"], (x) => x.ID, "Select loan");
 }
+
+window.openSearch = () => { $("searchOverlay").classList.add("show"); setTimeout(() => $("globalSearch").focus(), 50); };
+window.closeSearch = () => { $("searchOverlay").classList.remove("show"); $("globalSearch").value = ""; $("searchResults").innerHTML = ""; };
+
+function performSearch(query) {
+  const q = query.toLowerCase().trim(), el = $("searchResults");
+  if (!q) { el.innerHTML = ""; return; }
+  const results = [];
+  (DB.passbook || []).forEach((x) => { if (`${x.Category} ${x.Remarks} ${x.Date} ${x.Account}`.toLowerCase().includes(q)) results.push({ icon: "📒", title: x.Category, sub: x.Date, page: "passbook" }); });
+  if (!results.length) el.innerHTML = emptyState("🔍", `No results`);
+  else el.innerHTML = results.map((r) => `<div class="item" onclick="closeSearch(); gotoPage('${r.page}');"><div><b>${r.icon} ${esc(r.title)}</b><small>${esc(r.sub)}</small></div></div>`).join("");
+}
+
+
 /* ═══════════════ APP STARTUP ═══════════════ */
 
 document.addEventListener("DOMContentLoaded", () => {
