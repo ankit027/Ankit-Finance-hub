@@ -1,37 +1,22 @@
-/* Simple service worker for PWA install + offline shell */
-
-const CACHE_NAME = "afh-v3";
+const CACHE_NAME = "afh-v4"; // Version bumped to kill old cache
 const SHELL = ["./", "./index.html", "./style.css", "./app.js"];
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(
-    caches.open(CACHE_NAME).then((c) => c.addAll(SHELL).catch(() => {}))
-  );
-  self.skipWaiting();
+  self.skipWaiting(); // Force new service worker to take over immediately
 });
 
 self.addEventListener("activate", (e) => {
   e.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    )
+      Promise.all(keys.map((k) => caches.delete(k))) // DELETE ALL OLD CACHES
+    ).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
-
-  // Never cache Apps Script API calls
-  if (url.hostname.includes("script.google.com")) return;
-
-  // Never cache Chart.js CDN
-  if (url.hostname.includes("jsdelivr")) return;
-
-  // Cache-first for static shell
+  if (url.hostname.includes("script.google.com") || url.hostname.includes("jsdelivr")) return;
   if (e.request.method === "GET") {
-    e.respondWith(
-      caches.match(e.request).then((cached) => cached || fetch(e.request))
-    );
+    e.respondWith(caches.match(e.request).then((cached) => cached || fetch(e.request)));
   }
 });
