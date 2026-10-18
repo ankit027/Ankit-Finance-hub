@@ -77,6 +77,58 @@ window.handleCategoryChange = function() {
     }
   }
 };
+/* ═══════════════ ACCOUNTS / PAYMENT MODES ═══════════════ */
+
+const DEFAULT_ACCOUNTS = [
+  "Cash", "HDFC Bank", "Kotak", "Jio Payments Bank", 
+  "Amazon Pay", "Paytm", "Credit Card", "Vehicle Tracker"
+];
+
+function getCustomAccounts() {
+  try { return JSON.parse(localStorage.getItem("afh-custom-accounts") || "[]"); } catch { return []; }
+}
+
+function saveCustomAccount(name) {
+  const existing = getCustomAccounts();
+  if (!existing.includes(name) && !DEFAULT_ACCOUNTS.includes(name)) {
+    existing.push(name);
+    localStorage.setItem("afh-custom-accounts", JSON.stringify(existing));
+  }
+}
+
+function populateAccountDropdown() {
+  const el = $("pbAccount");
+  if (!el) return;
+
+  // Combine default + custom + accounts already used in past entries
+  const usedInData = (DB.passbook || []).map((x) => x.Account).filter(Boolean);
+  const allAccounts = unique([...DEFAULT_ACCOUNTS, ...getCustomAccounts(), ...usedInData]).sort();
+  const current = el.value;
+
+  el.innerHTML =
+    `<option value="">Select Account</option>` +
+    allAccounts.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("") +
+    `<option value="__new__">+ Add new account…</option>`;
+
+  if (allAccounts.includes(current)) el.value = current;
+}
+
+window.handleAccountChange = function() {
+  const el = $("pbAccount");
+  if (!el) return;
+
+  if (el.value === "__new__") {
+    const name = prompt("Enter new account name (e.g., SBI, Paytm):");
+    if (name && name.trim()) {
+      const clean = name.trim();
+      saveCustomAccount(clean);
+      populateAccountDropdown();
+      el.value = clean;
+    } else {
+      el.value = "";
+    }
+  }
+};
 
 
 /* ═══════════════ API & DATA ═══════════════ */
