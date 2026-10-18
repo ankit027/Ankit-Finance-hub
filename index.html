@@ -122,22 +122,22 @@
       <option>Income</option>
     </select>
     
-    <!-- Native Dropdown Category -->
+    <!-- Category Dropdown -->
     <select id="pbCat" onchange="handleCategoryChange()">
       <option value="">Select Category</option>
     </select>
 
     <input id="pbAmt" type="number" placeholder="Amount" step="0.01">
+    
+    <!-- Account / Payment Mode Dropdown -->
+    <select id="pbAccount" onchange="handleAccountChange()">
+      <option value="">Select Account</option>
+    </select>
+
     <input id="pbRemarks" list="remarksList" placeholder="Remarks">
     <button id="pbSaveBtn" onclick="addPassbook()">Save</button>
     <button class="secondary" onclick="cancelPassbookForm()">Cancel</button>
   </div>
-
-  <datalist id="remarksList"></datalist>
-  <div class="stats-row" id="passbookDash"></div>
-  <div id="pbList" class="list"></div>
-</section>
-
 <!-- ═══════════════ SALARY ═══════════════ -->
 <section id="salary" class="page">
   <div class="page-header">
