@@ -417,10 +417,27 @@ function togglePassbookForm() {
     form.classList.remove("hidden");
     $("pbDate").value = today();
     populateCategoryDropdown();
+    populateAccountDropdown();
     $("pbCat").focus();
   } else { cancelPassbookForm(); }
 }
 
+function editPassbook(id) {
+  const x = (DB.passbook || []).find((r) => String(r.ID) === String(id));
+  if (!x) return;
+  populateCategoryDropdown();
+  populateAccountDropdown();
+  $("pbForm").classList.remove("hidden");
+  $("pbEditId").value = x.ID || "";
+  $("pbDate").value = displayDate(x.Date);
+  $("pbType").value = x.Type || "Expense";
+  $("pbCat").value = x.Category || "";
+  $("pbAmt").value = x.Amount || "";
+  $("pbAccount").value = x.Account || "";
+  $("pbRemarks").value = x.Remarks || "";
+  $("pbForm").classList.add("editing");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
 function cancelPassbookForm() {
   $("pbForm").classList.add("hidden");
   ["pbEditId", "pbCat", "pbAmt", "pbRemarks"].forEach((id) => { if ($(id)) $(id).value = ""; });
@@ -446,15 +463,24 @@ function editPassbook(id) {
 
 async function addPassbook() {
   if (!val("pbDate") || !val("pbCat") || !num(val("pbAmt"))) return toast("Date, category and amount required");
+  if (!val("pbAccount")) return toast("Please select an account");
+
   const editing = !!val("pbEditId");
 
   try {
-    await save("passbook", { ID: val("pbEditId"), Date: val("pbDate"), Type: val("pbType"), Category: val("pbCat"), Amount: num(val("pbAmt")), Remarks: val("pbRemarks") });
+    await save("passbook", { 
+      ID: val("pbEditId"), 
+      Date: val("pbDate"), 
+      Type: val("pbType"), 
+      Category: val("pbCat"), 
+      Amount: num(val("pbAmt")), 
+      Account: val("pbAccount"), 
+      Remarks: val("pbRemarks") 
+    });
     cancelPassbookForm(); renderAll();
     showSuccess(`Saved!`, editing ? "Updated!" : "Saved!");
   } catch (e) { toast(e.message); }
 }
-
 function resetPassbookFilters() {
   ["pbFromDate", "pbToDate", "pbFilterCategory", "pbFilterType"].forEach((id) => { if ($(id)) $(id).value = ""; });
   renderPassbook();
@@ -657,35 +683,19 @@ async function addMaintenance() {
 function fillLists() {
   const cats = unique((DB.passbook || []).map((x) => x.Category));
   opt($("pbFilterCategory"), cats, (x) => x, (x) => x, "All");
+  
+  // Populate the Category & Account dropdowns
+  populateCategoryDropdown();
+  populateAccountDropdown();
+
   function dl(id, arr) { const e = $(id); if (e) e.innerHTML = unique(arr).map((x) => `<option value="${esc(x)}"></option>`).join(""); }
   dl("remarksList", (DB.passbook || []).map((x) => x.Remarks));
   dl("companyList", (DB.salary || []).map((x) => x.Company));
   dl("salaryRemarksList", (DB.salary || []).map((x) => x.Remarks));
   dl("personList", (DB.transactions || []).map((x) => x.Person));
+  
   opt($("emiLoan"), DB.loans || [], (x) => x["Loan Name"], (x) => x.ID, "Select loan");
 }
-
-window.openSearch = () => { $("searchOverlay").classList.add("show"); setTimeout(() => $("globalSearch").focus(), 50); };
-window.closeSearch = () => { $("searchOverlay").classList.remove("show"); $("globalSearch").value = ""; $("searchResults").innerHTML = ""; };
-
-function performSearch(query) {
-  const q = query.toLowerCase().trim(), el = $("searchResults");
-  if (!q) { el.innerHTML = ""; return; }
-  const results = [];
-  (DB.passbook || []).forEach((x) => { if (`${x.Category} ${x.Remarks} ${x.Date}`.toLowerCase().includes(q)) results.push({ icon: "📒", title: x.Category, sub: x.Date, page: "passbook" }); });
-  if (!results.length) el.innerHTML = emptyState("🔍", `No results`);
-  else el.innerHTML = results.map((r) => `<div class="item" onclick="closeSearch(); gotoPage('${r.page}');"><div><b>${r.icon} ${esc(r.title)}</b><small>${esc(r.sub)}</small></div></div>`).join("");
-}
-
-window.gotoPage = function(page) {
-  document.querySelectorAll(".page").forEach((p) => p.classList.remove("active"));
-  document.querySelectorAll("[data-page]").forEach((b) => b.classList.remove("active"));
-  $(page)?.classList.add("active");
-  document.querySelector(`[data-page="${page}"]`)?.classList.add("active");
-  $("sidebar").classList.remove("open"); window.scrollTo({ top: 0, behavior: "smooth" });
-};
-
-
 /* ═══════════════ APP STARTUP ═══════════════ */
 
 document.addEventListener("DOMContentLoaded", () => {
