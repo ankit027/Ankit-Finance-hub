@@ -25,3 +25,8 @@ IMPORTANT
 - Existing old fuel / maintenance rows will show “Not recorded” for payment account because they were saved before the account field was added.
 - The first fuel entry for a vehicle has no previous odometer, so distance since previous fill is left blank/zero. Later entries calculate the odometer difference.
 - For an oil or coolant service, record the actual odometer at the time of service. Enter 2,000 in the interval field if you want the next change after another 2,000 km.
+
+OPTIONAL MODULES REMOVED IN THIS VERSION
+- Money Splitter navigation and screen removed.
+- Investments & SIP navigation and screen removed.
+- Existing Google Sheet data/tabs for these modules are not deleted or cleared.
