@@ -12,25 +12,38 @@ const today=()=>new Date().toISOString().slice(0,10);
 
 window.addEventListener("unhandledrejection",e=>{console.error(e.reason);toast("⚠️ "+(e.reason?.message||"Something went wrong"))});
 
-async function api(action,payload={}){
-  const r=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action,...payload})});
-  const t=await r.text(); let d;
-  try{d=JSON.parse(t)}catch(e){throw Error("Invalid server response")}
-  if(!d.success)throw Error(d.error||"Server error");
-  return d;
+async function api(action,payload={},tries=2){
+  for(let a=1;a<=tries;a++){
+    const ctl=new AbortController(),to=setTimeout(()=>ctl.abort(),45000);
+    try{
+      const r=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action,...payload}),signal:ctl.signal,redirect:"follow"});
+      const t=await r.text();let d;
+      try{d=JSON.parse(t)}catch(e){throw Error("Server returned a web page, not data. Redeploy the Apps Script as a new version (Execute as Me, Access Anyone).")}
+      if(!d.success)throw Error(d.error||"Server error");
+      return d;
+    }catch(e){
+      if(e.name==="AbortError")e=Error("Request timed out");
+      if(a===tries||/Server returned|Invalid table/.test(e.message))throw e;
+      await new Promise(r=>setTimeout(r,1200*a));
+    }finally{clearTimeout(to)}
+  }
 }
+
 function toast(x){$("toast").textContent=x;$("toast").classList.add("show");setTimeout(()=>$("toast").classList.remove("show"),2200)}
 function status(x){$("status").textContent=x}
 function cache(){localStorage.setItem(KEY,JSON.stringify(DB))}
 
+let loading=false;
 async function loadAll(){
+  if(loading)return;loading=true;
   try{
     status("☁️ Syncing...");
     DB=(await api("loadAll")).data||{};
     ["salary","passbook","transactions","emi","loans","vehicles","fuel","maintenance"].forEach(k=>{if(!Array.isArray(DB[k]))DB[k]=[]});
-    await reconcileSalaryPassbook();
     cache();render();status("☁️ Synced");
-  }catch(e){status("⚠️ Sync Error");toast(e.message)}
+  }catch(e){status("⚠️ Sync failed");toast(e.message)}
+  finally{loading=false}
+  reconcileSalaryPassbook().then(c=>{if(c){cache();render()}}).catch(e=>console.warn("Salary reconcile skipped:",e.message));
 }
 async function save(table,data){
   const before=JSON.parse(JSON.stringify(DB[table]||[]));
@@ -149,24 +162,20 @@ function salaryPassbookRecord(x){
   };
 }
 async function reconcileSalaryPassbook(){
-  DB.passbook=DB.passbook||[];
+  DB.passbook=DB.passbook||[];let changed=false;
   for(const sal of (DB.salary||[])){
     const data=salaryPassbookRecord(sal);
-    const existing=DB.passbook.find(p=>String(p["Source ID"]||"")===data["Source ID"] || String(p.ID)===data.ID);
-    if(!existing){
-      const saved=await api("save",{table:"passbook",data});
-      const rec=saved.data?.record||data;
-      DB.passbook.push(rec);
-    }else{
-      const changed=["Date","Type","Category","Amount","Account","Remarks","Source ID"].some(k=>String(existing[k]??"")!==String(data[k]??""));
-      if(changed){
-        const saved=await api("save",{table:"passbook",data:{...existing,...data,ID:existing.ID}});
-        const rec=saved.data?.record||{...existing,...data};
-        const i=DB.passbook.findIndex(p=>String(p.ID)===String(existing.ID));
-        if(i>=0)DB.passbook[i]=rec;
-      }
-    }
+    const ex=DB.passbook.find(p=>String(p["Source ID"]||"")===data["Source ID"]||String(p.ID)===data.ID);
+    const same=ex&&String(ex.Date||"").slice(0,10)===data.Date&&n(ex.Amount)===data.Amount&&String(ex.Remarks||"")===data.Remarks&&String(ex["Source ID"]||"")===data["Source ID"];
+    if(same)continue;
+    try{
+      const saved=await api("save",{table:"passbook",data:ex?{...ex,...data,ID:ex.ID}:data});
+      const rec=saved.data?.record||data,i=DB.passbook.findIndex(p=>String(p.ID)===String(rec.ID));
+      if(i>=0)DB.passbook[i]=rec;else DB.passbook.push(rec);
+      changed=true;
+    }catch(e){console.warn("Salary sync stopped:",e.message);break}
   }
+  return changed;
 }
 
 function salary(){
