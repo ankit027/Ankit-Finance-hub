@@ -1,25 +1,31 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>Ankit Finance Hub</title>
-  <link rel="stylesheet" href="style.css">
+  <meta name="theme-color" content="#0b1f1b">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
 <header>
-  <button id="menuBtn">☰</button>
+  <button id="menuBtn" aria-label="Menu">☰</button>
   <h1>💰 Ankit Finance Hub</h1>
   <div class="right"><button id="themeBtn">🌙 Dark</button><span id="status">☁️ Connecting...</span></div>
 </header>
 
 <aside id="sidebar">
-  <button data-page="dashboard">🏠 Dashboard</button>
+  <button data-page="dashboard" class="active">🏠 Dashboard</button>
   <button data-page="passbook">📒 Passbook</button>
   <button data-page="salary">💰 Salary</button>
-  <button data-page="loans">🏦 Loans & EMI</button>
-  <button data-page="give">🤝 Give & Take</button>
-  <button data-page="vehicles">🚗 Bike & Car Tracker</button>
+  <button data-page="loans">🏦 Loans &amp; EMI</button>
+  <button data-page="give">🤝 Give &amp; Take</button>
+  <button data-page="vehicles">🚗 Bike &amp; Car Tracker</button>
 </aside>
 
 <main>
@@ -50,7 +56,7 @@
     <input id="pbDate" type="date">
     <select id="pbType"><option>Expense</option><option>Income</option></select>
     <input id="pbCat" list="categoryList" placeholder="Category">
-    <input id="pbAmt" type="number" placeholder="Amount">
+    <input id="pbAmt" type="number" inputmode="decimal" step="any" placeholder="Amount">
     <input id="pbAccount" list="accountList" placeholder="Account / UPI / Cash">
     <input id="pbRemarks" list="remarksList" placeholder="Remarks">
     <button id="pbSaveBtn" onclick="addPassbook()">Save</button>
@@ -66,7 +72,7 @@
   <h2>💰 Salary</h2>
   <div class="form">
     <input id="salMonth" type="month"><input id="salCompany" list="companyList" placeholder="Company">
-    <input id="salAmount" type="number" placeholder="Amount"><input id="salRemarks" list="salaryRemarksList" placeholder="Remarks">
+    <input id="salAmount" type="number" inputmode="decimal" step="any" placeholder="Amount"><input id="salRemarks" list="salaryRemarksList" placeholder="Remarks">
     <button onclick="addSalary()">Save</button>
   </div>
   <datalist id="companyList"></datalist><datalist id="salaryRemarksList"></datalist>
@@ -74,24 +80,24 @@
 </section>
 
 <section id="loans" class="page">
-  <h2>🏦 Loans & EMI</h2>
+  <h2>🏦 Loans &amp; EMI</h2>
   <h3>Add Loan</h3>
-  <div class="form"><input id="loanName" placeholder="Loan name"><input id="loanInitial" type="number" placeholder="Initial amount"><input id="loanRemarks" placeholder="Remarks"><button onclick="addLoan()">Add Loan</button></div>
+  <div class="form"><input id="loanName" placeholder="Loan name"><input id="loanInitial" type="number" inputmode="decimal" step="any" placeholder="Initial amount"><input id="loanRemarks" placeholder="Remarks"><button onclick="addLoan()">Add Loan</button></div>
   <h3>Mark EMI Paid</h3>
-  <div class="form"><select id="emiLoan"></select><input id="emiMonth" type="month"><input id="emiAmount" type="number" placeholder="EMI amount"><input id="emiRemarks" placeholder="Remarks"><button onclick="addEmi()">Mark EMI Paid</button></div>
+  <div class="form"><select id="emiLoan"></select><input id="emiMonth" type="month"><input id="emiAmount" type="number" inputmode="decimal" step="any" placeholder="EMI amount"><input id="emiRemarks" placeholder="Remarks"><button onclick="addEmi()">Mark EMI Paid</button></div>
   <div id="loanDash" class="grid"></div><div class="box"><canvas id="loanChart"></canvas></div><div id="loanList"></div>
 </section>
 
 <section id="give" class="page">
-  <h2>🤝 Give & Take</h2>
+  <h2>🤝 Give &amp; Take</h2>
   <p class="muted">Give = you need to pay them. Take = you will receive from them. Pay and Receive record settlements.</p>
-  <div class="form"><input id="gtPerson" list="personList" placeholder="Person"><select id="gtType"><option value="Give">Give (I have to pay)</option><option value="Take">Take (I will receive)</option><option value="Pay">Pay (reduce To Pay)</option><option value="Receive">Receive (reduce To Receive)</option></select><input id="gtAmount" type="number" placeholder="Amount"><input id="gtDate" type="date"><input id="gtPurpose" list="purposeList" placeholder="Purpose"><input id="gtNotes" list="giveNotesList" placeholder="Notes"><button onclick="addGive()">Save</button></div>
+  <div class="form"><input id="gtPerson" list="personList" placeholder="Person"><select id="gtType"><option value="Give">Give (I have to pay)</option><option value="Take">Take (I will receive)</option><option value="Pay">Pay (reduce To Pay)</option><option value="Receive">Receive (reduce To Receive)</option></select><input id="gtAmount" type="number" inputmode="decimal" step="any" placeholder="Amount"><input id="gtDate" type="date"><input id="gtPurpose" list="purposeList" placeholder="Purpose"><input id="gtNotes" list="giveNotesList" placeholder="Notes"><button onclick="addGive()">Save</button></div>
   <datalist id="personList"></datalist><datalist id="purposeList"></datalist><datalist id="giveNotesList"></datalist>
   <div id="giveDash" class="grid"></div><div id="gtDashboard" class="grid"></div><div class="box"><canvas id="giveChart"></canvas></div><div id="gtList"></div>
 </section>
 
 <section id="vehicles" class="page">
-  <h2>🚗 Bike & Car Maintenance & Petrol Tracker</h2>
+  <h2>🚗 Bike &amp; Car Maintenance &amp; Petrol Tracker</h2>
 
   <div class="filterbar">
     <label>Vehicle Type
@@ -116,10 +122,10 @@
   <div class="form">
     <select id="fuelVehicle"></select><input id="fuelDate" type="date">
     <input id="fuelLastOdo" type="number" placeholder="Previous Odometer (km)" readonly>
-    <input id="fuelOdo" type="number" min="0" placeholder="Current Odometer (km)">
+    <input id="fuelOdo" type="number" inputmode="decimal" min="0" placeholder="Current Odometer (km)">
     <input id="fuelDistance" type="number" placeholder="Distance since last fill (km)" readonly>
-    <input id="fuelQty" type="number" step="0.01" placeholder="Litres">
-    <input id="fuelAmount" type="number" placeholder="Amount Paid">
+    <input id="fuelQty" type="number" inputmode="decimal" step="0.01" placeholder="Litres">
+    <input id="fuelAmount" type="number" inputmode="decimal" step="any" placeholder="Amount Paid">
     <select id="fuelType"><option>Petrol</option><option>Diesel</option><option>CNG</option><option>Electric</option></select>
     <select id="fuelAccount"><option value="">Select payment mode / account</option></select>
     <input id="fuelNotes" list="fuelNotesList" placeholder="Notes"><button onclick="addFuel()">Save Fuel Entry</button>
@@ -129,17 +135,15 @@
   <div class="form">
     <select id="maintVehicle"></select><input id="maintDate" type="date">
     <select id="maintCategory"><option>Service</option><option>Oil Change</option><option>Engine Oil</option><option>Coolant Change</option><option>Tyres</option><option>Battery</option><option>Repair</option><option>Accessories</option><option>Insurance</option><option>Other</option></select>
-    <input id="maintAmount" type="number" placeholder="Amount">
-    <input id="maintOdo" type="number" min="0" placeholder="Actual KM at maintenance">
-    <input id="maintTargetKm" type="number" min="0" placeholder="Next change after how many km? (e.g. 2000)">
+    <input id="maintAmount" type="number" inputmode="decimal" step="any" placeholder="Amount">
+    <input id="maintOdo" type="number" inputmode="decimal" min="0" placeholder="Actual KM at maintenance">
+    <input id="maintTargetKm" type="number" inputmode="decimal" min="0" placeholder="Next change after how many km? (e.g. 2000)">
     <select id="maintAccount"><option value="">Select payment mode / account</option></select>
     <input id="maintRemarks" list="maintenanceRemarksList" placeholder="Remarks"><button onclick="addMaintenance()">Save Maintenance</button>
   </div>
 
   <h3>📊 Vehicle Dashboard</h3>
   <div id="vehicleDash" class="grid"></div>
-  <h3>🚗 Car & 🏍️ Bike Overview</h3>
-  <div id="vehicleIndividualDash" class="vehicle-dashboard-grid"></div>
 
   <h3>🔧 Vehicle Maintenance Summary</h3>
   <p class="muted">Current KM is updated from each fuel entry. Enter the service interval (distance to run after the service); the app adds it to the actual service odometer to calculate the next target. Oil and coolant reminders are tracked separately.</p>
@@ -156,7 +160,8 @@
 </main>
 
 <div id="toast"></div>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="app.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="app.js?v=5"></script>
+<script>if("serviceWorker"in navigator)window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));</script>
 </body>
 </html>
