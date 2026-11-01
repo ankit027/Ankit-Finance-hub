@@ -12,6 +12,7 @@ const today=()=>new Date().toISOString().slice(0,10);
 
 window.addEventListener("unhandledrejection",e=>{console.error(e.reason);toast("⚠️ "+(e.reason?.message||"Something went wrong"))});
 
+/* ---------- API ---------- */
 async function api(action,payload={},tries=2){
   for(let a=1;a<=tries;a++){
     const ctl=new AbortController(),to=setTimeout(()=>ctl.abort(),45000);
@@ -29,21 +30,21 @@ async function api(action,payload={},tries=2){
   }
 }
 
-function toast(x){$("toast").textContent=x;$("toast").classList.add("show");setTimeout(()=>$("toast").classList.remove("show"),2200)}
+function toast(x){$("toast").textContent=x;$("toast").classList.add("show");setTimeout(()=>$("toast").classList.remove("show"),2400)}
 function status(x){$("status").textContent=x}
-function cache(){localStorage.setItem(KEY,JSON.stringify(DB))}
+function cache(){try{localStorage.setItem(KEY,JSON.stringify(DB))}catch(e){}}
 
 let loading=false;
 async function loadAll(){
-  if(loading)return;loading=true;
+  if(loading)return;loading=true;let ok=false;
   try{
     status("☁️ Syncing...");
     DB=(await api("loadAll")).data||{};
     ["salary","passbook","transactions","emi","loans","vehicles","fuel","maintenance"].forEach(k=>{if(!Array.isArray(DB[k]))DB[k]=[]});
-    cache();render();status("☁️ Synced");
+    cache();render();status("☁️ Synced");ok=true;
   }catch(e){status("⚠️ Sync failed");toast(e.message)}
   finally{loading=false}
-  reconcileSalaryPassbook().then(c=>{if(c){cache();render()}}).catch(e=>console.warn("Salary reconcile skipped:",e.message));
+  if(ok)reconcileSalaryPassbook().then(c=>{if(c){cache();render()}}).catch(e=>console.warn("Salary reconcile skipped:",e.message));
 }
 async function save(table,data){
   const before=JSON.parse(JSON.stringify(DB[table]||[]));
@@ -66,31 +67,53 @@ async function del(table,id){
   if(!confirm("Delete this record?"))return;
   await api("delete",{table,id});
   DB[table]=(DB[table]||[]).filter(x=>String(x.ID)!==String(id));
-  if(table==="salary"){
-    const linked=(DB.passbook||[]).filter(x=>String(x["Source ID"]||"")===`salary:${id}` || String(x.ID)===`salary-${id}`);
-    for(const x of linked){await api("delete",{table:"passbook",id:x.ID});}
-    DB.passbook=(DB.passbook||[]).filter(x=>!linked.some(z=>String(z.ID)===String(x.ID)));
+
+  /* remove linked Passbook rows */
+  let linked=[];
+  if(table==="salary")linked=(DB.passbook||[]).filter(x=>String(x["Source ID"]||"")===`salary:${id}`||String(x.ID)===`salary-${id}`);
+  if(table==="fuel"||table==="maintenance")linked=(DB.passbook||[]).filter(x=>String(x.ID)===`${table}-${id}`);
+  for(const x of linked){await api("delete",{table:"passbook",id:x.ID})}
+  if(linked.length)DB.passbook=(DB.passbook||[]).filter(x=>!linked.some(z=>String(z.ID)===String(x.ID)));
+
+  /* remove EMI rows of a deleted loan */
+  if(table==="loans"){
+    const emis=(DB.emi||[]).filter(x=>String(x["Loan ID"])===String(id));
+    for(const x of emis){await api("delete",{table:"emi",id:x.ID})}
+    DB.emi=(DB.emi||[]).filter(x=>String(x["Loan ID"])!==String(id));
   }
   cache();render();toast("Deleted");
 }
 
+/* ---------- Navigation + theme ---------- */
 document.querySelectorAll("[data-page]").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll("[data-page]").forEach(x=>x.classList.toggle("active",x===b));
   document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
   $(b.dataset.page).classList.add("active");$("sidebar").classList.remove("open");
 });
 $("menuBtn").onclick=()=>$("sidebar").classList.toggle("open");
-$("themeBtn").onclick=()=>{document.body.classList.toggle("dark");$("themeBtn").textContent=document.body.classList.contains("dark")?"☀️ Light":"🌙 Dark";draw()};
+const setTheme=d=>{document.body.classList.toggle("dark",d);$("themeBtn").textContent=d?"☀️ Light":"🌙 Dark";try{localStorage.setItem("afh_theme",d?"dark":"light")}catch(e){}};
+$("themeBtn").onclick=()=>{setTheme(!document.body.classList.contains("dark"));draw()};
+try{setTheme(localStorage.getItem("afh_theme")==="dark")}catch(e){}
 
+/* ---------- UI helpers ---------- */
 function card(a,b){return `<div><small>${a}</small><b>${b}</b></div>`}
 function item(a,b,c=""){return `<div class="item"><span>${a}</span><span>${b} ${c}</span></div>`}
+const PAL=["#0f766e","#f59e0b","#6366f1","#ef4444","#22c55e","#06b6d4","#a855f7"];
 function chart(id,type,labels,data,label){
   if(!$(id))return;
   if(charts[id])charts[id].destroy();
-  charts[id]=new Chart($(id),{type,data:{labels,datasets:[{label,data}]},options:{responsive:true,maintainAspectRatio:false}});
+  const dark=document.body.classList.contains("dark"),txt=dark?"#8da39a":"#64726b",grid=dark?"#1f3029":"#e8ece6",pie=type==="doughnut";
+  charts[id]=new Chart($(id),{type,data:{labels,datasets:[{label,data,
+    backgroundColor:type==="line"?"rgba(15,118,110,.12)":labels.map((_,i)=>PAL[i%PAL.length]),
+    borderColor:PAL[0],borderWidth:type==="line"?2.5:0,borderRadius:type==="bar"?8:0,fill:type==="line",tension:.35}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:pie,labels:{color:txt}}},
+      scales:pie?{}:{x:{ticks:{color:txt},grid:{display:false}},y:{ticks:{color:txt},grid:{color:grid}}}}});
 }
+function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 
 function render(){lists();syncDashboardFilters();syncVehicleFilters();dash();passbook();salary();loans();give();vehicles();draw()}
 
+/* ---------- Filters ---------- */
 function syncDashboardFilters(){
   const cats=[...new Set((DB.passbook||[]).map(x=>String(x.Category||"").trim()).filter(Boolean))].sort();
   ["dashCategory","pbFilterCategory"].forEach(id=>{
@@ -106,8 +129,8 @@ function resetPassbookFilters(){$("pbFilterMonth").value=ym();$("pbFilterCategor
 function dashFilter(){return {month:$("dashMonth")?.value||ym(),category:$("dashCategory")?.value||""}}
 function pbFilter(){return {month:$("pbFilterMonth")?.value||ym(),category:$("pbFilterCategory")?.value||""}}
 function filterPassbook(rows,month,category){return rows.filter(x=>(!month||String(x.Date||"").slice(0,7)===month)&&(!category||String(x.Category||"")===category))}
-function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 
+/* ---------- Dashboard ---------- */
 function dash(){
   const f=dashFilter(),y=f.month,p=filterPassbook(DB.passbook||[],y,f.category),s=DB.salary||[],e=DB.emi||[];
   const otherIncome=p.filter(x=>String(x.Type||"").toLowerCase()==="income"&&String(x.Category||"").toLowerCase()!=="salary").reduce((a,x)=>a+n(x.Amount),0);
@@ -119,6 +142,7 @@ function dash(){
   $("dash").innerHTML=[["💰 Salary",m(sal)],["📈 Total Income",m(totalIncome)],["💸 Expense",m(exp)],["🏦 EMI Paid",m(emi)],["🤝 To Receive",m(rec)],["🤝 To Pay",m(owe)],["⚖️ Net Outstanding",m(rec-owe)],["💳 Net Cash Flow",m(totalIncome-exp-emi)]].map(x=>card(...x)).join("");
 }
 
+/* ---------- Passbook ---------- */
 function passbook(){
   const f=pbFilter(),p=filterPassbook(DB.passbook||[],f.month,f.category);
   const i=p.filter(x=>String(x.Type||"").toLowerCase()==="income").reduce((a,x)=>a+n(x.Amount),0);
@@ -148,6 +172,7 @@ async function addPassbook(){
   clearPassbook();
 }
 
+/* ---------- Salary ---------- */
 function salaryPassbookRecord(x){
   const mk=monthKey(x.Month)||ym();
   return {
@@ -177,27 +202,28 @@ async function reconcileSalaryPassbook(){
   }
   return changed;
 }
-
 function salary(){
   const s=DB.salary||[],y=ym();
   if($("salMonth")&&!$("salMonth").value)$("salMonth").value=y;
   const cur=s.filter(x=>monthKey(x.Month)===y).reduce((a,x)=>a+n(x.Amount),0),tot=s.reduce((a,x)=>a+n(x.Amount),0);
   $("salaryDash").innerHTML=[["This Month",m(cur)],["Total Recorded",m(tot)],["Salary Entries",s.length],["Companies",new Set(s.map(x=>String(x.Company||"").trim()).filter(Boolean)).size]].map(x=>card(...x)).join("");
-  $("salaryList").innerHTML=s.slice().sort((a,b)=>monthKey(b.Month).localeCompare(monthKey(a.Month))).map(x=>item(`${esc(x.Month)} • ${esc(x.Company)}`,m(x.Amount),`<button class="danger" onclick="del('salary','${x.ID}')">Delete</button>`)).join("")||"<p>No salary records</p>";
+  $("salaryList").innerHTML=s.slice().sort((a,b)=>monthKey(b.Month).localeCompare(monthKey(a.Month))).map(x=>item(`${esc(monthKey(x.Month)||x.Month)} • ${esc(x.Company)}`,m(x.Amount),`<button class="danger" onclick="del('salary','${x.ID}')">Delete</button>`)).join("")||"<p>No salary records</p>";
 }
 async function addSalary(){
   if(n($("salAmount").value)<=0)return toast("Enter valid salary amount");
   const rec=await save("salary",{ID:uid(),Month:$("salMonth").value||ym(),Company:$("salCompany").value,Amount:n($("salAmount").value),Remarks:$("salRemarks").value});
-  const pb=salaryPassbookRecord(rec);
-  await save("passbook",pb);
+  await save("passbook",salaryPassbookRecord(rec));
   $("salCompany").value="";$("salAmount").value="";$("salRemarks").value="";
   render();toast("✓ Salary saved and added to Passbook as Income");
 }
 
+/* ---------- Loans & EMI ---------- */
 function loans(){
   const l=DB.loans||[],e=DB.emi||[],y=ym(),init=l.reduce((a,x)=>a+n(x["Initial Amount"]),0),paid=e.reduce((a,x)=>a+n(x.Amount),0),month=e.filter(x=>monthKey(x.Month)===y).reduce((a,x)=>a+n(x.Amount),0);
   $("loanDash").innerHTML=[["Initial Loans",m(init)],["EMI This Month",m(month)],["Total EMI Paid",m(paid)],["Loans",l.length]].map(x=>card(...x)).join("");
+  const prev=$("emiLoan").value;
   $("emiLoan").innerHTML=`<option value="">Select loan</option>`+l.map(x=>`<option value="${x.ID}">${esc(x["Loan Name"])}</option>`).join("");
+  if(l.some(x=>x.ID===prev))$("emiLoan").value=prev;
   $("loanList").innerHTML=l.map(x=>{const p=e.filter(z=>z["Loan ID"]===x.ID).reduce((a,z)=>a+n(z.Amount),0);return item(`<b>${esc(x["Loan Name"])}</b><br><small>Initial ${m(x["Initial Amount"])} • Paid ${m(p)} • Remaining ${m(Math.max(0,n(x["Initial Amount"])-p))}</small>`,"",`<button class="danger" onclick="del('loans','${x.ID}')">Delete</button>`)}).join("")||"<p>No loans</p>";
 }
 async function addLoan(){
@@ -212,6 +238,7 @@ async function addEmi(){
   $("emiAmount").value="";$("emiRemarks").value="";
 }
 
+/* ---------- Give & Take ---------- */
 function giveBal(){
   const o={};
   (DB.transactions||[]).forEach(x=>{
@@ -246,55 +273,11 @@ async function addGive(){
   $("gtPerson").value="";$("gtAmount").value="";$("gtPurpose").value="";$("gtNotes").value="";
 }
 
-const members=g=>{try{return JSON.parse(g["Members JSON"]||"[]")}catch(e){return[]}};
-const json=(x,d=[])=>{try{return JSON.parse(x||"")}catch(e){return d}};
-function calc(g){
-  const st={};members(g).forEach(x=>st[x]={name:x,paid:0,share:0,out:0,in:0,net:0});
-  const ex=(DB.splitExpenses||[]).filter(x=>x["Group ID"]===g.ID);
-  ex.forEach(e=>{const a=n(e.Amount),payer=e["Paid By"];if(!st[payer])st[payer]={name:payer,paid:0,share:0,out:0,in:0,net:0};st[payer].paid+=a;let ps=json(e["Members JSON"],[]);if(!ps.length)ps=members(g);const cs=json(e["Custom Shares JSON"],null);ps.forEach(x=>{if(!st[x])st[x]={name:x,paid:0,share:0,out:0,in:0,net:0};st[x].share+=cs?n(cs[x]):a/ps.length})});
-  (DB.splitSettlements||[]).filter(x=>x["Group ID"]===g.ID).forEach(s=>{if(st[s.From])st[s.From].out+=n(s.Amount);if(st[s.To])st[s.To].in+=n(s.Amount)});
-  Object.values(st).forEach(x=>x.net=x.paid-x.share+x.out-x.in);return{ex,st:Object.values(st),total:ex.reduce((s,x)=>s+n(x.Amount),0)};
-}
-function settle(st){let c=st.filter(x=>x.net>.01).map(x=>({name:x.name,a:x.net})),d=st.filter(x=>x.net<-.01).map(x=>({name:x.name,a:-x.net})),o=[],i=0,j=0;while(i<d.length&&j<c.length){let a=Math.min(d[i].a,c[j].a);o.push({from:d[i].name,to:c[j].name,amount:a});d[i].a-=a;c[j].a-=a;if(d[i].a<.01)i++;if(c[j].a<.01)j++}return o}
-function split(){
-  const gs=DB.splitGroups||[],old=$("spGroupSel").value,id=old||gs[0]?.ID||"",opts=`<option value="">Select group</option>`+gs.map(g=>`<option value="${g.ID}">${esc(g["Group Name"])}</option>`).join("");
-  $("spGroupSel").innerHTML=opts;$("spGroupExpense").innerHTML=opts;$("spGroupSel").value=id;$("spGroupExpense").value=id;
-  const g=gs.find(x=>x.ID===id);if(!g){$("splitSummary").innerHTML="";return}
-  const ms=members(g);$("spPaidBy").innerHTML=`<option value="">Paid by</option>`+ms.map(x=>`<option>${esc(x)}</option>`).join("");
-  $("memberChips").innerHTML=ms.map(x=>`<span class="chip">${esc(x)}<button class="danger" onclick="removeMember('${String(x).replace(/'/g,"\\'")}')">×</button></span>`).join("");
-  const c=calc(g);$("splitSummary").innerHTML=[["Total Expenses",m(c.total)],["Expenses",c.ex.length],...c.st.map(x=>[`${esc(x.name)} • ${x.net>0?"Receive":x.net<0?"Pay":"Settled"}`,m(Math.abs(x.net))])].map(x=>card(...x)).join("");
-  $("settlementList").innerHTML=settle(c.st).map(x=>item(`<b>${esc(x.from)}</b> → <b>${esc(x.to)}</b>`,m(x.amount),`<button class="success" onclick="settleNow('${g.ID}','${String(x.from).replace(/'/g,"\\'")}','${String(x.to).replace(/'/g,"\\'")}',${x.amount})">Mark Settled</button>`)).join("")||"<p>🎉 Everyone is settled!</p>";
-  $("splitExpenseList").innerHTML=c.ex.slice().reverse().map(x=>item(`<b>${esc(x.Title)}</b><br><small>${esc(x.Date)} • Paid by ${esc(x["Paid By"])} • ${esc(json(x["Members JSON"],[]).join(", "))}</small>`,m(x.Amount),`<button class="secondary" onclick="editExpense('${x.ID}')">Edit</button> <button class="danger" onclick="del('splitExpenses','${x.ID}')">Delete</button>`)).join("")||"<p>No expenses</p>";
-  $("splitSettlementHistory").innerHTML=(DB.splitSettlements||[]).filter(x=>x["Group ID"]===g.ID).slice().reverse().map(x=>item(`<b>${esc(x.From)}</b> paid <b>${esc(x.To)}</b><br><small>${esc(x.Date)}</small>`,m(x.Amount),`<button class="danger" onclick="del('splitSettlements','${x.ID}')">Delete</button>`)).join("")||"<p>No settlements</p>";
-  $("splitList").innerHTML=gs.map(x=>`<div class="item"><span><b>${esc(x["Group Name"])}</b><br><small>${esc(members(x).join(", "))}</small></span><button class="secondary" onclick="openGroup('${x.ID}')">Open</button></div>`).join("");shares();
-}
-function openGroup(id){$("spGroupSel").value=id;$("spGroupExpense").value=id;split();draw()}
-function shares(){if($("spSplitType").value!=="custom")return $("customShares").innerHTML="";const g=(DB.splitGroups||[]).find(x=>x.ID===$("spGroupExpense").value);if(!g)return;let ps=$("spMembersSel").value.split(",").map(x=>x.trim()).filter(Boolean);if(!ps.length)ps=members(g);$("customShares").innerHTML=ps.map(x=>`<div class="share"><span>${esc(x)}</span><input class="shareamt" data-name="${esc(x)}" type="number" placeholder="Amount"></div>`).join("")}
-async function addGroup(){const name=$("spGroup").value.trim(),ms=$("spMembers").value.split(",").map(x=>x.trim()).filter(Boolean);if(!name||ms.length<2)return toast("Enter group name and minimum 2 members");const g=await save("splitGroups",{ID:uid(),"Group Name":name,Category:$("spCat").value,"Members JSON":JSON.stringify([...new Set(ms)])});$("spGroup").value="";$("spMembers").value="";openGroup(g.ID)}
-async function addMember(){const g=(DB.splitGroups||[]).find(x=>x.ID===$("spGroupSel").value),x=$("newMember").value.trim();if(!g||!x)return toast("Select group and enter member");const ms=members(g);if(ms.includes(x))return toast("Already added");await save("splitGroups",{...g,"Members JSON":JSON.stringify([...ms,x])});$("newMember").value=""}
-async function removeMember(x){const g=(DB.splitGroups||[]).find(z=>z.ID===$("spGroupSel").value);if(!g||!confirm(`Remove ${x}?`))return;await save("splitGroups",{...g,"Members JSON":JSON.stringify(members(g).filter(z=>z!==x))})}
-async function renameGroup(){const g=(DB.splitGroups||[]).find(x=>x.ID===$("spGroupSel").value),x=prompt("Group name",g?.["Group Name"]);if(x?.trim())await save("splitGroups",{...g,"Group Name":x.trim()})}
-function clearSplit(){$("splitEditId").value="";$("spTitle").value="";$("spAmount").value="";$("spMembersSel").value="";$("spDate").value=today();$("spSplitType").value="equal";$("customShares").innerHTML=""}
-function editExpense(id){const e=(DB.splitExpenses||[]).find(x=>x.ID===id);if(!e)return;$("splitEditId").value=id;$("spGroupExpense").value=e["Group ID"];$("spTitle").value=e.Title;$("spAmount").value=e.Amount;$("spPaidBy").value=e["Paid By"];$("spDate").value=e.Date;$("spMembersSel").value=json(e["Members JSON"],[]).join(", ");$("spSplitType").value=e["Custom Shares JSON"]?"custom":"equal";shares();const c=json(e["Custom Shares JSON"],{});document.querySelectorAll(".shareamt").forEach(i=>i.value=n(c[i.dataset.name]))}
-async function saveSplitExpense(){const g=(DB.splitGroups||[]).find(x=>x.ID===$("spGroupExpense").value),a=n($("spAmount").value),payer=$("spPaidBy").value;if(!g||a<=0||!payer)return toast("Select group, payer and amount");let ps=$("spMembersSel").value.split(",").map(x=>x.trim()).filter(Boolean);if(!ps.length)ps=members(g);let custom="";if($("spSplitType").value==="custom"){let o={};document.querySelectorAll(".shareamt").forEach(i=>o[i.dataset.name]=n(i.value));if(Math.abs(Object.values(o).reduce((s,x)=>s+x,0)-a)>.01)return toast("Custom total must equal expense amount");custom=JSON.stringify(o)}await save("splitExpenses",{ID:$("splitEditId").value||uid(),"Group ID":g.ID,Title:$("spTitle").value||"Expense",Amount:a,"Paid By":payer,"Members JSON":JSON.stringify(ps),"Custom Shares JSON":custom,Date:$("spDate").value||today()});clearSplit()}
-async function settleNow(g,f,t,a){if(confirm(`${f} paid ${m(a)} to ${t}?`))await save("splitSettlements",{ID:uid(),"Group ID":g,From:f,To:t,Amount:a,Date:today(),Notes:"Settlement"})}
-
-function invest(){
-  const b=DB.baskets||[],a=DB.assets||[],p=DB.sipPayments||[],plan=a.reduce((s,x)=>s+n(x["Monthly Amount"]),0),paid=p.filter(x=>monthKey(x.Month)===ym()).reduce((s,x)=>s+n(x.Amount),0);
-  $("investmentDash").innerHTML=[["Monthly Planned",m(plan)],["Paid",m(paid)],["Pending",m(Math.max(0,plan-paid))],["Baskets",b.length]].map(x=>card(...x)).join("");
-  $("assetBasket").innerHTML=`<option value="">Select basket</option>`+b.map(x=>`<option value="${x.ID}">${esc(x["Basket Name"])}</option>`).join("");
-  $("basketList").innerHTML=b.map(x=>{const as=a.filter(z=>z["Basket ID"]===x.ID),t=as.reduce((s,z)=>s+n(z["Monthly Amount"]),0),done=p.some(z=>z["Basket ID"]===x.ID&&z.Month===ym());return item(`<b>${esc(x["Basket Name"])}</b><br><small>${esc(as.map(z=>z["Asset Name"]).join(", "))}</small>`,m(t),done?"✓ PAID":`<button onclick="markBasket('${x.ID}',${t})">Mark Paid</button>`)}).join("")||"<p>No baskets</p>";
-}
-async function addBasket(){const name=$("sipPerson").value.trim(),basket=$("sipBasket").value.trim();if(!name||!basket)return toast("Enter person and basket");let p=(DB.people||[]).find(x=>x.Name===name);if(!p)p=await save("people",{ID:uid(),Name:name});await save("baskets",{ID:uid(),"Person ID":p.ID,"Basket Name":basket});$("sipPerson").value="";$("sipBasket").value=""}
-async function addAsset(){if(!$("assetBasket").value)return toast("Select basket");if(!$("assetName").value.trim()||n($("assetAmount").value)<=0)return toast("Enter asset and amount");await save("assets",{ID:uid(),"Basket ID":$("assetBasket").value,"Asset Name":$("assetName").value,"Asset Type":$("assetType").value,"Monthly Amount":n($("assetAmount").value)});$("assetName").value="";$("assetAmount").value=""}
-function markBasket(id,total){return save("sipPayments",{ID:uid(),"Basket ID":id,Month:ym(),Amount:total,"Paid At":new Date().toISOString()})}
-
-/* VEHICLE FILTER + MAINTENANCE SUMMARY */
+/* ---------- Vehicles ---------- */
 function vehicleFilterState(){return {type:$("vehicleTypeFilter")?.value||"",id:$("vehicleFilter")?.value||""}}
 function syncVehicleFilters(){
   const vs=DB.vehicles||[],typeEl=$("vehicleTypeFilter"),vehEl=$("vehicleFilter");if(!typeEl||!vehEl)return;
   const prevType=typeEl.value,prevId=vehEl.value;
-  typeEl.value=prevType;
   const filtered=vs.filter(v=>!prevType||v["Vehicle Type"]===prevType);
   vehEl.innerHTML='<option value="">All Vehicles</option>'+filtered.map(v=>`<option value="${v.ID}">${esc(v["Vehicle Name"])} • ${esc(v["Vehicle Type"])}</option>`).join("");
   if(filtered.some(v=>v.ID===prevId))vehEl.value=prevId;
@@ -308,12 +291,6 @@ function latestOdoForVehicle(id){
 function latestMaintenanceForVehicle(id,kind){
   const rows=(DB.maintenance||[]).filter(x=>String(x["Vehicle ID"])===String(id)&&n(x.Odometer)>0&&(!kind||kind(x))).sort((a,b)=>String(a.Date||"").localeCompare(String(b.Date||""))||n(a.Odometer)-n(b.Odometer));
   return rows.length?rows[rows.length-1]:null;
-}
-function targetLabel(v,category){
-  const cat=String(category||"").toLowerCase();
-  if(cat==="oil change"||cat==="engine oil")return "Next Oil Target";
-  if(cat==="service")return "Next Service Target";
-  return "Next Target";
 }
 function renderMaintenanceSummary(vs){
   const cards=vs.map(v=>{
@@ -332,7 +309,7 @@ function renderMaintenanceSummary(vs){
       const target=interval>0?n(x.Odometer)+interval:0;
       const remain=target>0?target-current:0;
       const cls=target<=0?"":remain<0?"km-over":remain<=500?"km-warn":"km-good";
-      const remainingText=target<=0?"Not set":!current?"Waiting for first fuel odometer":remain<0?`${Math.abs(remain).toLocaleString("en-IN")} km overdue`: `${remain.toLocaleString("en-IN")} km`;
+      const remainingText=target<=0?"Not set":!current?"Waiting for first fuel odometer":remain<0?`${Math.abs(remain).toLocaleString("en-IN")} km overdue`:`${remain.toLocaleString("en-IN")} km`;
       return `<div class="maint-row"><span>Last ${esc(title)}</span><b>${esc(String(x.Date||"").slice(0,10))} • ${n(x.Odometer).toLocaleString("en-IN")} km</b></div>
       <div class="maint-row"><span>Service interval</span><b>${interval>0?interval.toLocaleString("en-IN")+" km":"Not entered"}</b></div>
       <div class="maint-row"><span>Next ${esc(title)} Target</span><b>${target>0?target.toLocaleString("en-IN")+" km":"Not set"}</b></div>
@@ -342,18 +319,13 @@ function renderMaintenanceSummary(vs){
   });
   $("vehicleMaintenanceSummary").innerHTML=cards.join("")||"<p>No vehicle selected.</p>";
 }
-function previousFuelOdo(vehicleId){
-  const rows=(DB.fuel||[]).filter(x=>String(x["Vehicle ID"])===String(vehicleId)&&n(x.Odometer)>0).sort((a,b)=>String(a.Date||"").localeCompare(String(b.Date||""))||n(a.Odometer)-n(b.Odometer));
-  return rows.length?n(rows[rows.length-1].Odometer):0;
-}
+function previousFuelOdo(vehicleId){return latestOdoForVehicle(vehicleId)}
 function updateFuelOdometerFields(){
-  const vehicleId=$("fuelVehicle").value;
-  const previous=previousFuelOdo(vehicleId);
+  const previous=previousFuelOdo($("fuelVehicle").value);
   $("fuelLastOdo").value=previous||"";
   const current=n($("fuelOdo").value);
   $("fuelDistance").value=current>0&&current>=previous?current-previous:"";
 }
-
 function vehicles(){
   const vsAll=DB.vehicles||[],vs=filteredVehicles(),ids=new Set(vs.map(v=>v.ID));
   const fuel=(DB.fuel||[]).filter(x=>ids.has(x["Vehicle ID"])),maint=(DB.maintenance||[]).filter(x=>ids.has(x["Vehicle ID"]));
@@ -415,16 +387,18 @@ async function addMaintenance(){
   render();toast("✓ Maintenance saved and payment added to Passbook");
 }
 
+/* ---------- Suggestion lists ---------- */
 function lists(){
   const p=DB.passbook||[],s=DB.salary||[],t=DB.transactions||[];
   const fill=(id,a)=>{const e=$(id);if(e)e.innerHTML=[...new Set(a.filter(Boolean))].map(x=>`<option value="${esc(x)}">`).join("")};
-  fill("categoryList",p.map(x=>x.Category));fill("accountList",["Cash","UPI","HDFC Bank","Kotak","Jio Payments Bank","Amazon Pay","Paytm","Credit Card",...p.map(x=>x.Account),...(DB.fuel||[]).map(x=>x.Account),...(DB.maintenance||[]).map(x=>x.Account)]);fill("remarksList",p.map(x=>x.Remarks));
+  const accounts=[...new Set(["Cash","UPI","HDFC Bank","Kotak","Jio Payments Bank","Amazon Pay","Paytm","Credit Card",...p.map(x=>x.Account),...(DB.fuel||[]).map(x=>x.Account),...(DB.maintenance||[]).map(x=>x.Account)].filter(Boolean))];
+  fill("categoryList",p.map(x=>x.Category));fill("accountList",accounts);fill("remarksList",p.map(x=>x.Remarks));
   fill("companyList",s.map(x=>x.Company));fill("salaryRemarksList",s.map(x=>x.Remarks));fill("personList",t.map(x=>x.Person));fill("vehicleNameList",(DB.vehicles||[]).map(x=>x["Vehicle Name"]));
   fill("purposeList",t.map(x=>x.Purpose));fill("giveNotesList",t.map(x=>x.Notes));fill("fuelNotesList",(DB.fuel||[]).map(x=>x.Notes));fill("maintenanceRemarksList",(DB.maintenance||[]).map(x=>x.Remarks));
-  const accounts=[...new Set(["Cash","UPI","HDFC Bank","Kotak","Jio Payments Bank","Amazon Pay","Paytm","Credit Card",...p.map(x=>x.Account),...(DB.fuel||[]).map(x=>x.Account),...(DB.maintenance||[]).map(x=>x.Account)].filter(Boolean))];
   ["fuelAccount","maintAccount"].forEach(id=>{const el=$(id);if(!el)return;const old=el.value;el.innerHTML='<option value="">Select payment mode / account</option>'+accounts.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("");if(accounts.includes(old))el.value=old;});
 }
 
+/* ---------- Charts ---------- */
 function draw(){
   const f=dashFilter(),y=f.month,p=filterPassbook(DB.passbook||[],y,f.category),s=DB.salary||[],e=DB.emi||[],l=DB.loans||[];
   const otherIncome=p.filter(x=>String(x.Type||"").toLowerCase()==="income"&&String(x.Category||"").toLowerCase()!=="salary").reduce((z,x)=>z+n(x.Amount),0);
@@ -432,8 +406,17 @@ function draw(){
   const sal=(!f.category||String(f.category).toLowerCase()==="salary")?s.filter(x=>monthKey(x.Month)===y).reduce((z,x)=>z+n(x.Amount),0):0,totalIncome=sal+otherIncome,em=e.filter(x=>monthKey(x.Month)===y).reduce((z,x)=>z+n(x.Amount),0);
   chart("mainChart","bar",["Salary","Other Income","Total Income","Expense","EMI"],[sal,otherIncome,totalIncome,exp,em],"Amount");
   chart("expenseChart","doughnut",["Total Income","Expense"],[totalIncome,exp],"Amount");
-  chart("passbookChart","bar",["Income","Expense"],[otherIncome,exp],"Amount");
-  const sm={};s.forEach(x=>sm[x.Month]=(sm[x.Month]||0)+n(x.Amount));chart("salaryChart","line",Object.keys(sm),Object.values(sm),"Salary");
+
+  /* Passbook chart follows the Passbook filters and includes all income */
+  const pf=pbFilter(),pp=filterPassbook(DB.passbook||[],pf.month,pf.category);
+  const pbInc=pp.filter(x=>String(x.Type||"").toLowerCase()==="income").reduce((z,x)=>z+n(x.Amount),0);
+  const pbExp=pp.filter(x=>String(x.Type||"").toLowerCase()==="expense").reduce((z,x)=>z+n(x.Amount),0);
+  chart("passbookChart","bar",["Income","Expense"],[pbInc,pbExp],"Amount");
+
+  /* Salary chart groups by normalised month */
+  const sm={};s.slice().sort((a,b)=>monthKey(a.Month).localeCompare(monthKey(b.Month))).forEach(x=>{const k=monthKey(x.Month)||String(x.Month);sm[k]=(sm[k]||0)+n(x.Amount)});
+  chart("salaryChart","line",Object.keys(sm),Object.values(sm),"Salary");
+
   chart("loanChart","doughnut",["Initial","EMI Paid"],[l.reduce((z,x)=>z+n(x["Initial Amount"]),0),e.reduce((z,x)=>z+n(x.Amount),0)],"Amount");
   const gb=Object.values(giveBal());chart("giveChart","bar",gb.map(x=>x.person),gb.map(x=>Math.abs(x.balance)),"Outstanding");
   const vs=filteredVehicles(),ids=new Set(vs.map(v=>v.ID)),fu=(DB.fuel||[]).filter(x=>ids.has(x["Vehicle ID"])),ma=(DB.maintenance||[]).filter(x=>ids.has(x["Vehicle ID"]));
@@ -441,16 +424,16 @@ function draw(){
   chart("maintenanceChart","bar",vs.map(v=>v["Vehicle Name"]),vs.map(v=>ma.filter(x=>x["Vehicle ID"]===v.ID).reduce((z,x)=>z+n(x.Amount),0)),"Maintenance Cost");
 }
 
+/* ---------- Init ---------- */
 ["dashMonth","dashCategory","pbFilterMonth","pbFilterCategory"].forEach(id=>{const el=$(id);if(el)el.onchange=()=>render()});
 if($("fuelVehicle"))$("fuelVehicle").addEventListener("change",updateFuelOdometerFields);
 if($("fuelOdo"))$("fuelOdo").addEventListener("input",updateFuelOdometerFields);
 if($("vehicleTypeFilter"))$("vehicleTypeFilter").onchange=()=>{syncVehicleFilters();render()};
 if($("vehicleFilter"))$("vehicleFilter").onchange=()=>render();
 
-
-
 ["pbDate","gtDate","fuelDate","maintDate"].forEach(x=>{if($(x))$(x).value=today()});
-["salMonth","emiMonth"].forEach(x=>$(x).value=ym());
-try{DB=JSON.parse(localStorage.getItem(KEY)||"{}")}catch(e){}
+["salMonth","emiMonth"].forEach(x=>{if($(x))$(x).value=ym()});
+document.querySelector('[data-page="dashboard"]')?.classList.add("active");
+try{DB=JSON.parse(localStorage.getItem(KEY)||"{}")}catch(e){DB={}}
 if(Object.keys(DB).length){render();status("☁️ Loading...")}
 loadAll();
